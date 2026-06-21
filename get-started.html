@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Get Started | Varden</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="start-body">
+    <main class="start-shell">
+      <nav class="start-nav" aria-label="Primary">
+        <a class="brand start-brand" href="./index.html">
+          <span class="brand-mark">V</span>
+          <div>
+            <strong>Varden</strong>
+            <span>Character Vault</span>
+          </div>
+        </a>
+        <div class="start-nav-actions">
+          <a href="./index.html">Catalog</a>
+          <a href="#models">Models</a>
+          <a class="solid-link" href="./index.html">Explore</a>
+        </div>
+      </nav>
+
+      <section class="start-hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Create and host characters</p>
+          <h1>Build your first Varden character vault.</h1>
+          <p>
+            Start with profiles, tags, avatars, and prompt-ready character notes. Add chat later with a model provider that fits your budget.
+          </p>
+          <div class="hero-actions">
+            <a class="solid-link" href="./index.html">Browse catalog</a>
+            <a class="ghost-link" href="#studio">Set up studio</a>
+          </div>
+        </div>
+
+        <div class="hero-showcase" aria-label="Varden preview">
+          <div class="showcase-card primary">
+            <span class="pill">Featured</span>
+            <h2>Natsume Kafka</h2>
+            <p>A quiet archivist who notices every lie before anyone speaks it.</p>
+            <div class="showcase-art"></div>
+          </div>
+          <div class="mini-metrics">
+            <div>
+              <strong>18K+</strong>
+              <span>Profiles ready</span>
+            </div>
+            <div>
+              <strong>2 paths</strong>
+              <span>Hugging Face or OpenAI</span>
+            </div>
+            <div>
+              <strong>Free first</strong>
+              <span>Static hosting friendly</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="start-section" id="studio">
+        <div class="section-heading">
+          <p class="eyebrow">Launch Flow</p>
+          <h2>Start with hosting. Turn on chat when the catalog works.</h2>
+        </div>
+        <div class="step-grid">
+          <article class="step-card">
+            <span>01</span>
+            <h3>Create profiles</h3>
+            <p>Save names, avatars, tags, greetings, personality notes, visibility, and creator ownership.</p>
+          </article>
+          <article class="step-card">
+            <span>02</span>
+            <h3>Publish safely</h3>
+            <p>Use public, unlisted, and private states with a simple report queue before opening discovery.</p>
+          </article>
+          <article class="step-card">
+            <span>03</span>
+            <h3>Add model routing</h3>
+            <p>When chat is ready, route messages through your backend so API keys and usage limits stay protected.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="start-section" id="models">
+        <div class="section-heading">
+          <p class="eyebrow">Chat Engine</p>
+          <h2>Use Hugging Face or OpenAI API.</h2>
+        </div>
+        <div class="provider-grid">
+          <article class="provider-card">
+            <div class="provider-top">
+              <span class="provider-badge hf">HF</span>
+              <div>
+                <h3>Hugging Face</h3>
+                <p>Best when you want open models, provider flexibility, or your own inference endpoint.</p>
+              </div>
+            </div>
+            <ul>
+              <li>Can run through Hugging Face Inference Providers or dedicated endpoints.</li>
+              <li>Good for experimenting with open roleplay/story models.</li>
+              <li>Needs more tuning, safety work, and latency testing.</li>
+            </ul>
+          </article>
+
+          <article class="provider-card recommended">
+            <div class="provider-top">
+              <span class="provider-badge ai">AI</span>
+              <div>
+                <h3>OpenAI API</h3>
+                <p>Best for a smoother first chat launch with strong managed models and simpler operations.</p>
+              </div>
+            </div>
+            <ul>
+              <li>Use your backend to call the API; never expose your key in the browser.</li>
+              <li>Works well with credit limits, daily caps, and conversation summaries.</li>
+              <li>Usually faster to ship than managing open-model hosting yourself.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="start-section cost-strip">
+        <div>
+          <p class="eyebrow">Recommended path</p>
+          <h2>Vercel or Cloudflare for the site, Supabase for accounts and profiles, OpenAI first for chat.</h2>
+        </div>
+        <a class="solid-link" href="./index.html">Open Varden catalog</a>
+      </section>
+    </main>
+  </body>
+</html>

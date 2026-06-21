@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Varden</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="rail">
+        <div class="brand">
+            <span class="brand-mark">V</span>
+          <div>
+            <strong>Varden</strong>
+            <span>Character Vault</span>
+          </div>
+        </div>
+
+        <button class="primary-action" id="openCreate" type="button">
+          <span>+</span>
+          New character
+        </button>
+
+        <nav class="nav-list" aria-label="Library sections">
+          <a class="nav-item nav-link" href="./get-started.html">Get Started</a>
+          <button class="nav-item active" type="button">Library</button>
+          <button class="nav-item" type="button">My Characters</button>
+          <button class="nav-item" type="button">Drafts</button>
+          <button class="nav-item" type="button">Bookmarks</button>
+        </nav>
+
+        <section class="meter-panel" aria-label="Launch checklist">
+          <div class="section-kicker">Studio Status</div>
+          <div class="meter-row">
+            <span>Profiles</span>
+            <strong>Live</strong>
+          </div>
+          <div class="meter-row">
+            <span>Moderation</span>
+            <strong>Basic</strong>
+          </div>
+          <div class="meter-row muted">
+            <span>Chat</span>
+            <strong>Later</strong>
+          </div>
+        </section>
+
+        <div class="account-strip">
+          <div class="avatar avatar-user"></div>
+          <div>
+            <strong>Varden Studio</strong>
+            <span>Creator workspace</span>
+          </div>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+          <p class="eyebrow">Catalog</p>
+            <h1>Varden</h1>
+          </div>
+          <div class="topbar-actions">
+            <a class="ghost-link" href="./get-started.html">Get Started</a>
+            <button class="ghost-button" type="button" id="toggleReview">Review queue</button>
+            <button class="solid-button" type="button" id="openCreateTop">Create</button>
+          </div>
+        </header>
+
+        <section class="filters" aria-label="Character filters">
+          <label class="search-box">
+            <span>Search</span>
+            <input id="searchInput" type="search" placeholder="Name, tag, source, creator..." />
+          </label>
+          <div class="segmented" role="group" aria-label="Visibility filter">
+            <button class="segment active" data-filter="all" type="button">All</button>
+            <button class="segment" data-filter="public" type="button">Public</button>
+            <button class="segment" data-filter="unlisted" type="button">Unlisted</button>
+            <button class="segment" data-filter="private" type="button">Private</button>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="library-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Characters</p>
+                <h2 id="resultCount">0 profiles</h2>
+              </div>
+              <select id="sortSelect" aria-label="Sort characters">
+                <option value="trending">Trending</option>
+                <option value="newest">Newest</option>
+                <option value="likes">Most liked</option>
+              </select>
+            </div>
+            <div class="character-grid" id="characterGrid"></div>
+          </div>
+
+          <aside class="detail-panel" aria-live="polite">
+            <div class="detail-art" id="detailArt"></div>
+            <div class="detail-body">
+              <div class="detail-meta">
+                <span id="detailVisibility"></span>
+                <span id="detailSource"></span>
+              </div>
+              <h2 id="detailName"></h2>
+              <p id="detailTagline"></p>
+              <div class="stat-row">
+                <div>
+                  <span>Likes</span>
+                  <strong id="detailLikes"></strong>
+                </div>
+                <div>
+                  <span>Bookmarks</span>
+                  <strong id="detailBookmarks"></strong>
+                </div>
+                <div>
+                  <span>Rating</span>
+                  <strong id="detailRating"></strong>
+                </div>
+              </div>
+              <div class="prompt-block">
+                <span>Greeting</span>
+                <p id="detailGreeting"></p>
+              </div>
+              <div class="prompt-block">
+                <span>Personality Notes</span>
+                <p id="detailPersonality"></p>
+              </div>
+              <div class="tag-list" id="detailTags"></div>
+              <div class="detail-actions">
+                <button class="solid-button" type="button">View profile</button>
+                <button class="ghost-button" type="button">Chat coming soon</button>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+
+      <aside class="review-panel" id="reviewPanel" aria-label="Review queue">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Trust Queue</p>
+            <h2>Moderation</h2>
+          </div>
+          <span class="status-dot"></span>
+        </div>
+        <div class="queue-list">
+          <div class="queue-item">
+            <span>New public profile</span>
+            <strong>3 pending</strong>
+          </div>
+          <div class="queue-item">
+            <span>Reports</span>
+            <strong>0 open</strong>
+          </div>
+          <div class="queue-item">
+            <span>Private drafts</span>
+            <strong>8 saved</strong>
+          </div>
+        </div>
+        <div class="schema-box">
+          <p class="eyebrow">Profile Health</p>
+          <code>Identity complete</code>
+          <code>Avatar ready</code>
+          <code>Prompt notes saved</code>
+          <code>Visibility set</code>
+        </div>
+      </aside>
+    </div>
+
+    <dialog class="creator-dialog" id="creatorDialog">
+      <form method="dialog" class="creator-form" id="creatorForm">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Character Draft</p>
+            <h2>Create a hosted profile</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Close" type="submit">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input name="name" required maxlength="44" placeholder="Natsume Kafka" />
+          </label>
+          <label>
+            Source
+            <input name="source" required maxlength="36" placeholder="Original, anime, game..." />
+          </label>
+          <label>
+            Creator
+            <input name="creator" maxlength="36" placeholder="Your name or alias" />
+          </label>
+          <label>
+            Visibility
+            <select name="visibility">
+              <option>public</option>
+              <option>unlisted</option>
+              <option>private</option>
+            </select>
+          </label>
+          <label>
+            Tags
+            <input name="tags" placeholder="mystery, academy, serious" />
+          </label>
+          <label class="upload-label">
+            Character Art
+            <input id="cardImageInput" type="file" accept="image/*" />
+          </label>
+        </div>
+        <div id="imagePreview" class="image-preview"></div>
+
+        <label>
+          Tagline
+          <input name="tagline" required maxlength="110" placeholder="A careful observer with too many secrets." />
+        </label>
+        <label>
+          Greeting
+          <textarea name="greeting" required rows="3" placeholder="Write the first line a visitor sees."></textarea>
+        </label>
+        <label>
+          Personality Notes
+          <textarea name="personality" required rows="4" placeholder="Keep this prompt-ready for future chat."></textarea>
+        </label>
+
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="submit">Cancel</button>
+          <button class="solid-button" value="default" type="submit">Save profile</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
