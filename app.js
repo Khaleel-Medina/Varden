@@ -55,11 +55,7 @@ async function clearCache() {
 }
 
 const SUPABASE_URL = 'https://ljruzruhbqkbxkflrvzi.supabase.co';
-const SUPABASE_ANON = import.meta.env?.SUPABASE_ANON || '';
-
-if (!SUPABASE_ANON) {
-  console.error('Varden: Missing SUPABASE_ANON environment variable.');
-}
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqcnV6cnVoYmtiY3hrbGZydnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MzQ0NjMsImV4cCI6MjA4NDQxMDQ2M30.ZlJcgo3KzQ9ND9VSEpH0yzHyeZFHid'; // public anon key
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
 console.log('Varden: Supabase client initialized');
