@@ -46,12 +46,13 @@
           </div>
         </section>
 
-        <div class="account-strip">
+        <div class="account-strip" id="accountStrip">
           <div class="avatar avatar-user"></div>
           <div>
-            <strong>Varden Studio</strong>
-            <span>Creator workspace</span>
+            <strong>Guest</strong>
+            <span>Sign in to create characters</span>
           </div>
+          <button class="ghost-button" id="signInBtn" style="margin-top:8px;width:100%;font-size:0.8rem;">Sign in</button>
         </div>
       </aside>
 
@@ -169,6 +170,36 @@
         </div>
       </aside>
     </div>
+
+    <!-- Auth dialog -->
+    <dialog class="creator-dialog" id="authDialog">
+      <form method="dialog" class="creator-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Authentication</p>
+            <h2>Sign in or create account</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Close" type="submit">x</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            Email
+            <input id="authEmail" type="email" required placeholder="you@example.com" />
+          </label>
+          <label>
+            Password
+            <input id="authPassword" type="password" required minlength="6" placeholder="Min 6 characters" />
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="button" id="authCancel">Cancel</button>
+          <button class="solid-button" value="default" type="button" id="authSubmit">Sign in</button>
+        </div>
+        <p style="text-align:center;color:var(--muted);font-size:0.85rem;">
+          Don't have an account? <a href="#" id="authToggle" style="color:var(--teal);">Create one</a>
+        </p>
+      </form>
+    </dialog>
 
     <dialog class="creator-dialog" id="creatorDialog">
       <form method="dialog" class="creator-form" id="creatorForm">

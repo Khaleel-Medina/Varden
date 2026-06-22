@@ -1,6 +1,7 @@
-import { getCharacters, getCharacter, saveCharacter, deleteCharacter, saveImage, getImage } from "./lib/db.js";
+// Varden — main app (Supabase-backed)
+import { supabase, signIn, signUp, signOut, onAuthChange, createCharacter, updateCharacter, deleteCharacter, getCharacters, uploadImage, searchCharacters, getProfile, upsertProfile } from './lib/supabase.js';
 
-// Default seed data (loaded once on first visit)
+// Seed data (shown only to non-authenticated users as demo)
 const SEED_CHARACTERS = [
   {
     id: "natsume-kafka",
@@ -103,7 +104,9 @@ const SEED_CHARACTERS = [
 let characters = [];
 let selectedId = null;
 let currentFilter = "all";
-let currentImageData = null; // base64 for the upload preview
+let currentImageData = null;
+let currentUser = null;
+let isDemo = true; // true when no user is logged in
 
 const grid = document.querySelector("#characterGrid");
 const resultCount = document.querySelector("#resultCount");
@@ -128,6 +131,100 @@ const detail = {
   tags: document.querySelector("#detailTags"),
 };
 
+// Auth UI elements
+const accountStrip = document.querySelector(".account-strip");
+const authDialog = document.getElementById('authDialog');
+const authEmail = document.getElementById('authEmail');
+const authPassword = document.getElementById('authPassword');
+const authSubmit = document.getElementById('authSubmit');
+const authToggle = document.getElementById('authToggle');
+const authCancel = document.getElementById('authCancel');
+let authMode = 'signin'; // 'signin' or 'signup'
+
+function updateAuthUI(user) {
+  currentUser = user;
+  isDemo = !user;
+  
+  if (user) {
+    // Show logged-in state
+    accountStrip.innerHTML = `
+      <div class="avatar avatar-user"></div>
+      <div>
+        <strong>${user.email?.split('@')[0] || 'User'}</strong>
+        <span>My vault</span>
+      </div>
+      <button class="ghost-button" id="signOutBtn" style="margin-top:8px;width:100%;font-size:0.8rem;">Sign out</button>
+    `;
+    document.getElementById('signOutBtn')?.addEventListener('click', handleSignOut);
+    document.getElementById('openCreate')?.removeAttribute('disabled');
+    document.getElementById('openCreateTop')?.removeAttribute('disabled');
+  } else {
+    // Show demo/guest state
+    accountStrip.innerHTML = `
+      <div class="avatar avatar-user"></div>
+      <div>
+        <strong>Guest</strong>
+        <span>Sign in to create characters</span>
+      </div>
+      <button class="ghost-button" id="signInBtn" style="margin-top:8px;width:100%;font-size:0.8rem;">Sign in</button>
+    `;
+    document.getElementById('signInBtn')?.addEventListener('click', () => authDialog.showModal());
+    document.getElementById('openCreate')?.setAttribute('disabled', '');
+    document.getElementById('openCreateTop')?.setAttribute('disabled', '');
+  }
+}
+
+async function handleSignIn(email, password) {
+  try {
+    await signIn(email, password);
+  } catch (e) {
+    alert(e.message || 'Sign in failed');
+  }
+}
+
+async function handleSignUp(email, password, displayName) {
+  try {
+    await signUp(email, password, displayName);
+    alert('Check your email to confirm your account');
+  } catch (e) {
+    alert(e.message || 'Sign up failed');
+  }
+}
+
+async function handleSignOut() {
+  await signOut();
+  updateAuthUI(null);
+  loadCharacters();
+}
+
+// Listen for auth changes
+onAuthChange((user) => {
+  updateAuthUI(user);
+  loadCharacters();
+  if (user) authDialog?.close();
+});
+
+// Auth dialog handlers
+authSubmit?.addEventListener('click', async () => {
+  const email = authEmail.value.trim();
+  const password = authPassword.value;
+  
+  if (authMode === 'signin') {
+    await handleSignIn(email, password);
+  } else {
+    await handleSignUp(email, password, email.split('@')[0]);
+  }
+});
+
+authToggle?.addEventListener('click', (e) => {
+  e.preventDefault();
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  authSubmit.textContent = authMode === 'signin' ? 'Sign in' : 'Create account';
+  authToggle.textContent = authMode === 'signin' ? 'Create one' : 'Sign in instead';
+});
+
+authCancel?.addEventListener('click', () => authDialog?.close());
+
 function setArt(element, art) {
   element.style.setProperty("--art-a", art[0]);
   element.style.setProperty("--art-b", art[1]);
@@ -139,21 +236,22 @@ function formatNumber(value) {
 }
 
 async function loadCharacters() {
-  try {
-    const stored = await getCharacters();
-    if (stored && stored.length > 0) {
-      characters = stored;
-    } else {
-      // Seed initial data
-      characters = [...SEED_CHARACTERS];
-      for (const c of characters) {
-        await saveCharacter(c);
-      }
-    }
-  } catch (e) {
-    console.warn("IndexedDB unavailable, using in-memory storage", e);
+  if (isDemo) {
+    // Show seed data for guests
     characters = [...SEED_CHARACTERS];
+  } else if (currentUser) {
+    try {
+      characters = await getCharacters(currentUser.id);
+      if (characters.length === 0) {
+        // Show seed data as demo for new users
+        characters = [...SEED_CHARACTERS];
+      }
+    } catch (e) {
+      console.error('Failed to load characters:', e);
+      characters = [...SEED_CHARACTERS];
+    }
   }
+  renderGrid();
 }
 
 function filteredCharacters() {
@@ -255,8 +353,21 @@ segments.forEach((segment) => {
   });
 });
 
-document.querySelector("#openCreate").addEventListener("click", () => dialog.showModal());
-document.querySelector("#openCreateTop").addEventListener("click", () => dialog.showModal());
+// Only allow create when logged in
+document.querySelector("#openCreate").addEventListener("click", () => {
+  if (isDemo) {
+    alert('Sign in to create characters');
+    return;
+  }
+  dialog.showModal();
+});
+document.querySelector("#openCreateTop").addEventListener("click", () => {
+  if (isDemo) {
+    alert('Sign in to create characters');
+    return;
+  }
+  dialog.showModal();
+});
 document.querySelector("#toggleReview").addEventListener("click", () => {
   reviewPanel.classList.toggle("open");
 });
@@ -283,18 +394,40 @@ if (imageInput) {
 form.addEventListener("submit", async (event) => {
   if (event.submitter?.value === "cancel") return;
   event.preventDefault();
+  
+  if (isDemo || !currentUser) {
+    alert('Sign in to create characters');
+    return;
+  }
+  
   const data = new FormData(form);
   const name = data.get("name").toString().trim();
-  const id = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`;
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const palette = [
     ["#a78bfa", "#10131d", "#3ad6c6"],
     ["#f3b35a", "#151923", "#f27b9b"],
     ["#8bd672", "#101818", "#6d5dfc"],
   ][characters.length % 3];
 
+  let artUrl = null;
+  
+  // Upload image if provided
+  if (currentImageData) {
+    try {
+      // Convert base64 to blob
+      const res = await fetch(currentImageData);
+      const blob = await res.blob();
+      const file = new File([blob], `character-${slug}.png`, { type: 'image/png' });
+      const uploadResult = await uploadImage(currentUser.id, file);
+      artUrl = uploadResult.publicUrl;
+    } catch (e) {
+      console.warn('Image upload failed:', e);
+    }
+  }
+
   const character = {
-    id,
     name,
+    slug,
     source: data.get("source").toString().trim(),
     creator: data.get("creator")?.toString().trim() || "Varden Studio",
     visibility: data.get("visibility").toString(),
@@ -308,33 +441,24 @@ form.addEventListener("submit", async (event) => {
       .map((tag) => tag.trim())
       .filter(Boolean)
       .slice(0, 5),
-    likes: 0,
-    bookmarks: 0,
-    rating: "New",
-    created: new Date().toISOString(),
-    art: palette,
+    art_a: palette[0],
+    art_b: palette[1],
+    art_c: palette[2],
+    art_url: artUrl,
   };
 
-  // Save image if provided
-  if (currentImageData) {
-    try {
-      await saveImage(id + "-img", currentImageData);
-      character.artImage = currentImageData;
-    } catch (e) {
-      console.warn("Image save failed:", e);
-    }
+  try {
+    await createCharacter(currentUser.id, character);
+    selectedId = null;
+    currentImageData = null;
+    form.reset();
+    if (imagePreview) imagePreview.innerHTML = "";
+    dialog.close();
+    loadCharacters();
+  } catch (e) {
+    alert('Failed to save character: ' + (e.message || 'Unknown error'));
   }
-
-  characters.unshift(character);
-  await saveCharacter(character);
-
-  selectedId = id;
-  currentImageData = null;
-  form.reset();
-  if (imagePreview) imagePreview.innerHTML = "";
-  dialog.close();
-  renderGrid();
 });
 
 // Initialize
-loadCharacters().then(renderGrid);
+loadCharacters();
