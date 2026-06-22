@@ -388,7 +388,7 @@ segments.forEach((segment) => {
 });
 
 document.querySelector("#openCreate").addEventListener("click", () => {
-  if (isDemo) {
+  if (!currentUser) {
     alert('Sign in to create characters');
     return;
   }
@@ -396,7 +396,7 @@ document.querySelector("#openCreate").addEventListener("click", () => {
 });
 
 document.querySelector("#openCreateTop").addEventListener("click", () => {
-  if (isDemo) {
+  if (!currentUser) {
     alert('Sign in to create characters');
     return;
   }
