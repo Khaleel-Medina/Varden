@@ -1,6 +1,58 @@
 // Varden — main app (Supabase auth + DB, Vercel Blob images, IndexedDB cache)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { openDB, getFromCache, saveToCache, clearCache } from './lib/cache.js';
+
+// IndexedDB cache (inlined to avoid MIME type issues with local .js imports)
+const CACHE_DB = 'varden-cache';
+const CACHE_STORE = 'characters';
+
+function openCache() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(CACHE_DB, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(CACHE_STORE)) db.createObjectStore(CACHE_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveToCache(userId, data) {
+  try {
+    const db = await openCache();
+    const tx = db.transaction(CACHE_STORE, 'readwrite');
+    await new Promise((resolve, reject) => {
+      tx.objectStore(CACHE_STORE).put(JSON.stringify(data), `user:${userId}`);
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    });
+  } catch (e) { console.warn('Cache save failed:', e); }
+}
+
+async function getFromCache(userId) {
+  try {
+    const db = await openCache();
+    const tx = db.transaction(CACHE_STORE, 'readonly');
+    const result = await new Promise((resolve, reject) => {
+      const req = tx.objectStore(CACHE_STORE).get(`user:${userId}`);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = reject;
+    });
+    return result ? JSON.parse(result) : null;
+  } catch (e) { console.warn('Cache read failed:', e); return null; }
+}
+
+async function clearCache() {
+  try {
+    const db = await openCache();
+    const tx = db.transaction(CACHE_STORE, 'readwrite');
+    await new Promise((resolve, reject) => {
+      tx.objectStore(CACHE_STORE).clear();
+      tx.oncomplete = resolve;
+      tx.onerror = reject;
+    });
+  } catch (e) { console.warn('Cache clear failed:', e); }
+}
 
 const SUPABASE_URL = 'https://ljruzruhbqkbxkflrvzi.supabase.co';
 const SUPABASE_ANON = import.meta.env?.SUPABASE_ANON || '';
