@@ -4,5 +4,10 @@
   "private": true,
   "dependencies": {
     "@vercel/blob": "^0.27.0"
+  },
+  "vercel": {
+    "routes": [
+      { "src": "/api/(.*)", "dest": "/api/$1" }
+    ]
   }
 }

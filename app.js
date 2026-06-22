@@ -1,5 +1,6 @@
-// Varden — main app (Supabase-backed)
-import { supabase, signIn, signUp, signOut, onAuthChange, createCharacter, updateCharacter, deleteCharacter, getCharacters, uploadImage, searchCharacters, getProfile, upsertProfile } from './lib/supabase.js';
+// Varden — main app (Supabase auth + DB, Vercel Blob images, IndexedDB cache)
+import { supabase, signIn, signUp, signOut, onAuthChange } from './lib/supabase.js';
+import { openDB, getFromCache, saveToCache, clearCache } from './lib/cache.js';
 
 // Seed data (shown only to non-authenticated users as demo)
 const SEED_CHARACTERS = [
@@ -106,7 +107,10 @@ let selectedId = null;
 let currentFilter = "all";
 let currentImageData = null;
 let currentUser = null;
-let isDemo = true; // true when no user is logged in
+let isDemo = true;
+
+// Cache: IndexedDB fallback
+let dbReady = openDB();
 
 const grid = document.querySelector("#characterGrid");
 const resultCount = document.querySelector("#resultCount");
@@ -139,14 +143,13 @@ const authPassword = document.getElementById('authPassword');
 const authSubmit = document.getElementById('authSubmit');
 const authToggle = document.getElementById('authToggle');
 const authCancel = document.getElementById('authCancel');
-let authMode = 'signin'; // 'signin' or 'signup'
+let authMode = 'signin';
 
 function updateAuthUI(user) {
   currentUser = user;
   isDemo = !user;
   
   if (user) {
-    // Show logged-in state
     accountStrip.innerHTML = `
       <div class="avatar avatar-user"></div>
       <div>
@@ -159,7 +162,6 @@ function updateAuthUI(user) {
     document.getElementById('openCreate')?.removeAttribute('disabled');
     document.getElementById('openCreateTop')?.removeAttribute('disabled');
   } else {
-    // Show demo/guest state
     accountStrip.innerHTML = `
       <div class="avatar avatar-user"></div>
       <div>
@@ -197,14 +199,12 @@ async function handleSignOut() {
   loadCharacters();
 }
 
-// Listen for auth changes
 onAuthChange((user) => {
   updateAuthUI(user);
   loadCharacters();
   if (user) authDialog?.close();
 });
 
-// Auth dialog handlers
 authSubmit?.addEventListener('click', async () => {
   const email = authEmail.value.trim();
   const password = authPassword.value;
@@ -235,23 +235,62 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en", { notation: "compact" }).format(value);
 }
 
+// Load characters: cache first, then Supabase
 async function loadCharacters() {
   if (isDemo) {
-    // Show seed data for guests
     characters = [...SEED_CHARACTERS];
-  } else if (currentUser) {
-    try {
-      characters = await getCharacters(currentUser.id);
-      if (characters.length === 0) {
-        // Show seed data as demo for new users
-        characters = [...SEED_CHARACTERS];
-      }
-    } catch (e) {
-      console.error('Failed to load characters:', e);
+    renderGrid();
+    return;
+  }
+  
+  if (!currentUser) {
+    characters = [...SEED_CHARACTERS];
+    renderGrid();
+    return;
+  }
+
+  // Try cache first
+  const cached = await getFromCache(currentUser.id);
+  if (cached) {
+    characters = cached;
+    renderGrid();
+    // Refresh from Supabase in background
+    refreshFromServer();
+    return;
+  }
+
+  await refreshFromServer();
+}
+
+async function refreshFromServer() {
+  try {
+    const dbChars = await supabase
+      .from('characters')
+      .select('*')
+      .eq('user_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    
+    if (dbChars.data && dbChars.data.length > 0) {
+      characters = dbChars.data;
+      // Save to cache
+      await saveToCache(currentUser.id, characters);
+    } else {
+      // New user: show seed data as demo
       characters = [...SEED_CHARACTERS];
     }
+    renderGrid();
+  } catch (e) {
+    console.error('Failed to load from server:', e);
+    // Fall back to cache
+    const cached = await getFromCache(currentUser.id);
+    if (cached) {
+      characters = cached;
+      renderGrid();
+    } else {
+      characters = [...SEED_CHARACTERS];
+      renderGrid();
+    }
   }
-  renderGrid();
 }
 
 function filteredCharacters() {
@@ -284,54 +323,47 @@ function filteredCharacters() {
 async function renderGrid() {
   const visible = filteredCharacters();
   resultCount.textContent = `${visible.length} profile${visible.length === 1 ? "" : "s"}`;
+  grid.innerHTML = "";
 
-  if (!visible.some((character) => character.id === selectedId) && visible[0]) {
-    selectedId = visible[0].id;
+  if (visible.length === 0) {
+    grid.innerHTML = `<div class="empty-state">
+      <p>No characters found.</p>
+      <p class="muted">${isDemo ? 'Sign in to create your first character.' : 'Try adjusting your search or filters.'}</p>
+    </div>`;
+    return;
   }
 
-  grid.innerHTML = visible
-    .map(
-      (character) => `
-        <button class="character-card ${character.id === selectedId ? "active" : ""}" type="button" data-id="${character.id}">
-          <div class="card-art" style="--art-a: ${character.art[0]}; --art-b: ${character.art[1]}; --art-c: ${character.art[2]}"></div>
-          <div class="card-body">
-            <div>
-              <h3>${character.name}</h3>
-              <span class="pill">${character.source}</span>
-            </div>
-            <p>${character.tagline}</p>
-            <div class="card-footer">
-              <span class="pill">${character.visibility}</span>
-              <span class="pill">${formatNumber(character.likes)} likes</span>
-            </div>
+  for (const character of visible) {
+    const card = document.createElement("div");
+    card.className = `character-card ${selectedId === character.id ? "selected" : ""}`;
+    card.dataset.id = character.id || character.slug;
+
+    const art = character.art || character.art_a ? [character.art_a, character.art_b, character.art_c] : ["#6d5dfc", "#141827", "#3ad6c6"];
+
+    card.innerHTML = `
+      <div class="card-art" style="--art-a:${art[0]};--art-b:${art[1]};--art-c:${art[2]}">
+        ${character.art_url ? `<img src="${character.art_url}" alt="${character.name}" style="width:100%;height:100%;object-fit:cover;" />` : ''}
+      </div>
+      <div class="card-body">
+        <div class="card-meta">
+          <div>
+            <strong>${character.name}</strong>
+            <span>${character.source}</span>
           </div>
-        </button>
-      `
-    )
-    .join("");
-
-  if (!visible.length) {
-    grid.innerHTML = `<div class="empty-state">No characters match this view yet.</div>`;
+          <span class="visibility-badge ${character.visibility || 'public'}">${character.visibility || 'public'}</span>
+        </div>
+        <p class="card-tagline">${character.tagline}</p>
+        <div class="card-tags">
+          ${(character.tags || []).slice(0, 3).map((tag) => `<span>${tag}</span>`).join("")}
+        </div>
+        <div class="card-stats">
+          <span>❤️ ${formatNumber(character.likes || 0)}</span>
+          <span>🔖 ${formatNumber(character.bookmarks || 0)}</span>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
   }
-
-  renderDetail();
-}
-
-async function renderDetail() {
-  const character = characters.find((item) => item.id === selectedId) || filteredCharacters()[0] || characters[0];
-  if (!character) return;
-
-  setArt(detail.art, character.art);
-  detail.visibility.textContent = character.visibility;
-  detail.source.textContent = character.source;
-  detail.name.textContent = character.name;
-  detail.tagline.textContent = character.tagline;
-  detail.likes.textContent = formatNumber(character.likes);
-  detail.bookmarks.textContent = formatNumber(character.bookmarks);
-  detail.rating.textContent = character.rating;
-  detail.greeting.textContent = character.greeting;
-  detail.personality.textContent = character.personality;
-  detail.tags.innerHTML = character.tags.map((tag) => `<span>${tag}</span>`).join("");
 }
 
 grid.addEventListener("click", (event) => {
@@ -339,6 +371,8 @@ grid.addEventListener("click", (event) => {
   if (!card) return;
   selectedId = card.dataset.id;
   renderGrid();
+  const character = characters.find(c => (c.id || c.slug) === selectedId);
+  if (character) showDetail(character);
 });
 
 searchInput.addEventListener("input", renderGrid);
@@ -353,7 +387,6 @@ segments.forEach((segment) => {
   });
 });
 
-// Only allow create when logged in
 document.querySelector("#openCreate").addEventListener("click", () => {
   if (isDemo) {
     alert('Sign in to create characters');
@@ -361,6 +394,7 @@ document.querySelector("#openCreate").addEventListener("click", () => {
   }
   dialog.showModal();
 });
+
 document.querySelector("#openCreateTop").addEventListener("click", () => {
   if (isDemo) {
     alert('Sign in to create characters');
@@ -368,6 +402,7 @@ document.querySelector("#openCreateTop").addEventListener("click", () => {
   }
   dialog.showModal();
 });
+
 document.querySelector("#toggleReview").addEventListener("click", () => {
   reviewPanel.classList.toggle("open");
 });
@@ -411,15 +446,26 @@ form.addEventListener("submit", async (event) => {
 
   let artUrl = null;
   
-  // Upload image if provided
+  // Upload image to Vercel Blob
   if (currentImageData) {
     try {
-      // Convert base64 to blob
       const res = await fetch(currentImageData);
       const blob = await res.blob();
       const file = new File([blob], `character-${slug}.png`, { type: 'image/png' });
-      const uploadResult = await uploadImage(currentUser.id, file);
-      artUrl = uploadResult.publicUrl;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('userId', currentUser.id);
+      formData.append('slug', slug);
+      
+      const uploadRes = await fetch('/api/blob-upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (uploadRes.ok) {
+        const result = await uploadRes.json();
+        artUrl = result.url;
+      }
     } catch (e) {
       console.warn('Image upload failed:', e);
     }
@@ -434,13 +480,7 @@ form.addEventListener("submit", async (event) => {
     tagline: data.get("tagline").toString().trim(),
     greeting: data.get("greeting").toString().trim(),
     personality: data.get("personality").toString().trim(),
-    tags: data
-      .get("tags")
-      .toString()
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean)
-      .slice(0, 5),
+    tags: data.get("tags").toString().split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 5),
     art_a: palette[0],
     art_b: palette[1],
     art_c: palette[2],
@@ -448,17 +488,28 @@ form.addEventListener("submit", async (event) => {
   };
 
   try {
-    await createCharacter(currentUser.id, character);
+    // Save to Supabase
+    const result = await supabase.from('characters').insert({
+      user_id: currentUser.id,
+      ...character,
+    }).select().single();
+    
+    if (result.error) throw result.error;
+    
+    // Update local state
+    characters.unshift(result.data);
     selectedId = null;
     currentImageData = null;
     form.reset();
     if (imagePreview) imagePreview.innerHTML = "";
     dialog.close();
-    loadCharacters();
+    
+    // Refresh cache
+    await saveToCache(currentUser.id, characters);
+    renderGrid();
   } catch (e) {
     alert('Failed to save character: ' + (e.message || 'Unknown error'));
   }
 });
 
-// Initialize
 loadCharacters();
