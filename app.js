@@ -1,6 +1,43 @@
 // Varden — main app (Supabase auth + DB, Vercel Blob images, IndexedDB cache)
-import { supabase, signIn, signUp, signOut, onAuthChange } from './lib/supabase.js';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { openDB, getFromCache, saveToCache, clearCache } from './lib/cache.js';
+
+const SUPABASE_URL = 'https://ljruzruhbqkbxkflrvzi.supabase.co';
+const SUPABASE_ANON = import.meta.env?.SUPABASE_ANON || '';
+
+if (!SUPABASE_ANON) {
+  console.error('Varden: Missing SUPABASE_ANON environment variable.');
+}
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
+console.log('Varden: Supabase client initialized');
+
+// Auth helpers (inline to avoid importing from lib/supabase.js)
+async function signUp(email, password, displayName) {
+  const { data, error } = await supabase.auth.signUp({
+    email, password,
+    options: { data: { display_name: displayName } }
+  });
+  if (error) throw error;
+  return data;
+}
+
+async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data;
+}
+
+async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+function onAuthChange(cb) {
+  return supabase.auth.onAuthStateChange((event, session) => {
+    cb(session?.user ?? null);
+  });
+}
 
 // Seed data (shown only to non-authenticated users as demo)
 const SEED_CHARACTERS = [
