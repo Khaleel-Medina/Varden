@@ -119,19 +119,47 @@ export function oauthRedirectUrl() {
   return `${window.location.origin}${window.location.pathname}`;
 }
 
-// Hands the browser to the provider. On success the page navigates away, so there
-// is nothing to await afterwards; failures (provider not enabled, bad client) come
-// back synchronously and are thrown for the dialog to show.
+// Ask the auth server whether this provider is actually usable before the browser
+// leaves the app. A disabled provider answers 400 with JSON; a working one answers
+// with a redirect we cannot read but can recognise. When the check itself is
+// blocked (CORS), we assume it is fine and let the navigation happen.
+export async function probeProviderUrl(url) {
+  try {
+    const response = await fetch(url, { method: 'GET', redirect: 'manual', credentials: 'omit' });
+    if (response.type === 'opaqueredirect' || response.status === 0) return { ok: true };
+    if (response.ok) return { ok: true };
+    let message = `HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      message = body?.msg || body?.message || body?.error_description || message;
+    } catch {
+      // Non-JSON body: the status is all we have.
+    }
+    return { ok: false, message };
+  } catch {
+    return { ok: true };
+  }
+}
+
+// Hands the browser to the provider. The URL is requested with the redirect
+// suppressed so a provider that was never enabled can be reported in the dialog —
+// otherwise the tab is replaced by a raw JSON error and the app is gone.
 export async function signInWithProvider(provider) {
   const supabase = await getClient();
-  const { error } = await supabase.auth.signInWithOAuth({
+  const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
       redirectTo: oauthRedirectUrl(),
+      skipBrowserRedirect: true,
       ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}),
     },
   });
   if (error) throw new Error(explainAuth(error));
+  const url = data?.url;
+  if (!url) throw new Error('The sign-in service did not return a provider address.');
+  const probe = await probeProviderUrl(url);
+  if (!probe.ok) throw new Error(explainAuth({ message: probe.message }));
+  window.location.assign(url);
   return true;
 }
 

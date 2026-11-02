@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCharacter, normalizeCharacter, saveCharacter } from './cards.js';
 // Only the provider list is used; shared.js creates its client lazily, so importing
 // it here does not open a second auth client on this page.
-import { OAUTH_PROVIDERS } from './shared.js';
+import { OAUTH_PROVIDERS, probeProviderUrl } from './shared.js';
 
 // IndexedDB cache (inlined to avoid MIME type issues with local .js imports)
 const CACHE_DB = 'varden-cache';
@@ -283,11 +283,20 @@ async function startProviderSignIn(provider) {
   if (!provider) return;
   showAuthError('');
   try {
-    const { error } = await supabase.auth.signInWithOAuth({
+    // Ask for the URL without navigating, so a provider that was never enabled is
+    // reported here instead of replacing the page with a JSON error.
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${location.origin}${location.pathname}` },
+      options: {
+        redirectTo: `${location.origin}${location.pathname}`,
+        skipBrowserRedirect: true,
+      },
     });
     if (error) throw error;
+    if (!data?.url) throw new Error('The sign-in service did not return a provider address.');
+    const probe = await probeProviderUrl(data.url);
+    if (!probe.ok) throw new Error(probe.message);
+    location.assign(data.url);
   } catch (error) {
     showAuthError(explainAuthError(error));
   }
