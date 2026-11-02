@@ -163,3 +163,29 @@ while it is disabled in Supabase is harmless: the button appears and the click e
 
 `Confirm email` only affects the email path; OAuth users are verified by their provider and skip it. A first-time OAuth
 user needs no extra setup — the first card they publish creates their `shared_cards` row, owned by their new account.
+
+## NSFW tagging and the admin role
+
+Uploads carry an `nsfw` flag, filtered **in the query** rather than after download — a visitor with the filter off never
+requests art it is hiding. The Community feed has a **Show NSFW** toggle that remembers itself in localStorage, and both
+the publish and edit dialogs can set or clear the flag, so a card can be relabelled without re-uploading.
+
+Run `supabase-nsfw-admin.sql` after the accounts migration (idempotent). It adds:
+
+- `shared_cards.nsfw` plus an index for the filter
+- a private `admins` table whose policy lets a signed-in user see **only their own** row, so you can learn that you are an
+  admin but not who else is
+- `public.is_admin()` — `security definer`, so row policies elsewhere can ask the question without opening the table up
+- delete policies: `auth.uid() = user_id or public.is_admin()`, with matching storage policies on **both** buckets,
+  because deleting the row while leaving the PNG behind would keep the file downloadable
+- `promote_admin(email)`, revoked from the public API so the browser cannot call it
+
+### Making yourself the admin
+
+1. Sign up on the site first — the account has to exist before it can be promoted.
+2. In the SQL editor: `select public.promote_admin('you@example.com');`
+3. Reload the library page. Cards published by other accounts now show **Remove (admin)**; your own stay under *My cards*.
+
+Revoke with `delete from public.admins where user_id = '<uuid>';`
+
+The role only widens deletion — admins do **not** gain read access to other people's private drafts.

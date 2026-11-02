@@ -34,6 +34,7 @@ import {
   signOut,
   signUp,
   updateSharedCard,
+  viewerIsAdmin,
 } from './shared.js';
 
 const state = {
@@ -54,6 +55,8 @@ const state = {
     mineError: null,
     mineLoading: false,
     returning: false,
+    showNsfw: false,
+    isAdmin: false,
   },
   account: { mode: 'signin', busy: false },
   share: { character: null, busy: false },
@@ -98,6 +101,9 @@ const els = {
   sharedGrid: document.getElementById('sharedGrid'),
   sharedNote: document.getElementById('sharedNote'),
   refreshShared: document.getElementById('refreshShared'),
+  showNsfw: document.getElementById('showNsfw'),
+  shareNsfw: document.getElementById('shareNsfw'),
+  fUploadNsfw: document.getElementById('fUploadNsfw'),
   accountBtn: document.getElementById('accountBtn'),
   accountDialog: document.getElementById('accountDialog'),
   accountForm: document.getElementById('accountForm'),
@@ -733,6 +739,7 @@ function bindEvents() {
 function sharedCardRow(card) {
   const article = document.createElement('article');
   article.className = 'shared-card';
+  if (card.nsfw) article.classList.add('is-nsfw');
 
   const art = document.createElement('div');
   art.className = 'shared-card-art';
@@ -743,6 +750,13 @@ function sharedCardRow(card) {
     image.alt = `${card.name} card art`;
     image.loading = 'lazy';
     art.append(image);
+  }
+
+  if (card.nsfw) {
+    const badge = document.createElement('span');
+    badge.className = 'nsfw-badge';
+    badge.textContent = 'NSFW';
+    art.append(badge);
   }
 
   const body = document.createElement('div');
@@ -764,6 +778,19 @@ function sharedCardRow(card) {
   download.title = 'Save the PNG card and add this character to your library';
 
   body.append(title, by, tagline, download);
+
+  // Admins may remove cards they did not publish. Their own cards are managed
+  // through My cards, so this button never duplicates that.
+  if (state.shared.isAdmin && card.user_id && card.user_id !== state.shared.user?.id) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'ghost-button danger admin-action';
+    remove.dataset.adminDelete = card.id;
+    remove.textContent = 'Remove (admin)';
+    remove.title = 'Delete this card for everyone';
+    body.append(remove);
+  }
+
   article.append(art, body);
   return article;
 }
@@ -787,15 +814,28 @@ function renderShared() {
     return;
   }
 
-  els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library. Drafts marked private are not listed here.`;
+  const hiddenNote = state.shared.showNsfw ? '' : ' NSFW cards are hidden — use the filter to show them.';
+  els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library. Drafts marked private are not listed here.${hiddenNote}`;
   els.sharedGrid.append(...cards.map(sharedCardRow));
 }
 
 async function loadShared() {
   state.shared = { ...state.shared, loading: true };
   renderShared();
-  const [listing, user] = await Promise.all([listSharedCards(), getSharedUser()]);
-  state.shared = { cards: listing.cards, error: listing.error, user, loading: false };
+  const [listing, user] = await Promise.all([
+    listSharedCards(60, { includeNsfw: state.shared.showNsfw }),
+    getSharedUser(),
+  ]);
+  // Spread rather than replace: mine/returning/showNsfw live on this object too, and
+  // replacing it wiped them whenever the feed refreshed.
+  state.shared = {
+    ...state.shared,
+    cards: listing.cards,
+    error: listing.error,
+    user,
+    isAdmin: user ? await viewerIsAdmin() : false,
+    loading: false,
+  };
   renderShared();
   return state.shared;
 }
@@ -1043,6 +1083,7 @@ function openShareDialog(character) {
   if (els.shareTitle) els.shareTitle.textContent = `Share ${character.name}`;
   const publicChoice = els.shareForm?.querySelector('input[name="shareVisibility"][value="public"]');
   if (publicChoice) publicChoice.checked = true;
+  if (els.shareNsfw) els.shareNsfw.checked = false;
   els.shareDialog?.showModal();
 }
 
@@ -1051,14 +1092,17 @@ async function confirmShare() {
   if (!character || state.share.busy) return;
   const picked = els.shareForm?.querySelector('input[name="shareVisibility"]:checked');
   const visibility = picked?.value === 'private' ? 'private' : 'public';
+  const nsfw = Boolean(els.shareNsfw?.checked);
   state.share.busy = true;
   if (els.shareConfirm) els.shareConfirm.disabled = true;
   try {
-    await shareCard(character, { visibility });
+    await shareCard(character, { visibility, nsfw });
     toast(
       visibility === 'private'
         ? `${character.name} saved as a private draft. Only you can open it.`
-        : `${character.name} published. Anyone can download it now.`
+        : nsfw
+          ? `${character.name} published and tagged NSFW, so it stays behind the filter.`
+          : `${character.name} published. Anyone can download it now.`
     );
     els.shareDialog?.close();
     await Promise.all([loadShared(), loadMine()]);
@@ -1086,6 +1130,7 @@ async function editUpload(id) {
   els.fUploadTagline.value = row.tagline || '';
   els.fUploadTags.value = (row.tags || []).join(', ');
   els.fUploadVisibility.value = row.visibility === 'private' ? 'private' : 'public';
+  if (els.fUploadNsfw) els.fUploadNsfw.checked = Boolean(row.nsfw);
   state.upload = { row, character: null, busy: false };
   els.uploadDialog?.showModal();
   try {
@@ -1101,6 +1146,7 @@ async function saveUpload(event) {
   const { row, character } = state.upload;
   if (!row || !character || state.upload.busy) return;
   const visibility = els.fUploadVisibility.value === 'private' ? 'private' : 'public';
+  const nsfw = Boolean(els.fUploadNsfw?.checked);
   const updated = normalizeCharacter({
     ...character,
     name: els.fUploadName.value.trim() || character.name,
@@ -1112,7 +1158,7 @@ async function saveUpload(event) {
   if (els.uploadSave) els.uploadSave.disabled = true;
   showUploadError('');
   try {
-    await updateSharedCard(row, updated, { visibility });
+    await updateSharedCard(row, updated, { visibility, nsfw });
     toast(`${updated.name} updated.`);
     els.uploadDialog?.close();
     await Promise.all([loadShared(), loadMine()]);
@@ -1182,9 +1228,41 @@ async function startProviderSignIn(button) {
   }
 }
 
+// Admin removal of a card someone else published. Ownership is enforced by row
+// policy on the server; this only decides whether to offer the button.
+async function adminRemoveCard(id) {
+  const card = state.shared.cards.find((item) => item.id === id);
+  if (!card || !state.shared.isAdmin) return;
+  const question = `Remove "${card.name}" by ${card.creator || 'another creator'}? This deletes the card and its file for everyone and cannot be undone.`;
+  if (!window.confirm(question)) return;
+  try {
+    await deleteSharedCard(card);
+    toast(`${card.name} removed.`);
+    await loadShared();
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
 function initShared() {
   els.refreshShared?.addEventListener('click', () => loadShared());
   els.refreshMine?.addEventListener('click', () => loadMine());
+
+  try {
+    state.shared.showNsfw = localStorage.getItem('varden.showNsfw') === '1';
+  } catch {
+    state.shared.showNsfw = false;
+  }
+  if (els.showNsfw) els.showNsfw.checked = state.shared.showNsfw;
+  els.showNsfw?.addEventListener('change', () => {
+    state.shared.showNsfw = Boolean(els.showNsfw.checked);
+    try {
+      localStorage.setItem('varden.showNsfw', state.shared.showNsfw ? '1' : '0');
+    } catch {
+      // A browser with storage blocked still filters for this visit.
+    }
+    loadShared();
+  });
 
   // Coming back from a provider: either tokens to consume or a refusal to report.
   const oauthError = oauthErrorFromUrl(initialSearch, initialHash);
@@ -1234,7 +1312,9 @@ function initShared() {
   });
 
   document.addEventListener('click', (event) => {
-    const target = event.target.closest?.('[data-share], [data-pull], [data-edit-upload], [data-delete-upload]');
+    const target = event.target.closest?.(
+      '[data-share], [data-pull], [data-edit-upload], [data-delete-upload], [data-admin-delete]'
+    );
     if (!target) return;
     if (target.dataset.share) {
       const character = state.characters.find((item) => item.id === target.dataset.share);
@@ -1250,6 +1330,7 @@ function initShared() {
       return;
     }
     if (target.dataset.deleteUpload) removeUpload(target.dataset.deleteUpload);
+    if (target.dataset.adminDelete) adminRemoveCard(target.dataset.adminDelete);
   });
 
   onAuthChange((user) => {

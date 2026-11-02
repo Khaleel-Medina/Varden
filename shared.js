@@ -25,7 +25,7 @@ const PUBLIC_BUCKET = 'cards';
 const PRIVATE_BUCKET = 'cards-private';
 
 const CARD_FIELDS =
-  'id,name,creator,tagline,tags,card_path,card_url,size,visibility,bucket,created_at,updated_at,user_id';
+  'id,name,creator,tagline,tags,card_path,card_url,size,visibility,bucket,nsfw,created_at,updated_at,user_id';
 
 let clientPromise = null;
 
@@ -222,19 +222,42 @@ export async function signOut() {
 
 // The community feed: public rows only. Signed-in visitors can still see their
 // own private cards, but those are listed through listMyCards instead.
-export async function listSharedCards(limit = 60) {
+// NSFW is filtered in the query rather than after download, so a hidden card's art
+// is never fetched by someone who has the filter on.
+export async function listSharedCards(limit = 60, { includeNsfw = false } = {}) {
   try {
     const supabase = await getClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from('shared_cards')
       .select(CARD_FIELDS)
       .eq('visibility', 'public')
       .order('created_at', { ascending: false })
       .limit(limit);
+    if (!includeNsfw) query = query.eq('nsfw', false);
+    const { data, error } = await query;
     if (error) return { cards: [], error: explain(error) };
     return { cards: data || [], error: null };
   } catch (error) {
     return { cards: [], error: explain(error) };
+  }
+}
+
+// Whether the signed-in visitor may remove other people's cards. The row is only
+// readable by its owner, so a non-admin simply gets null back.
+export async function viewerIsAdmin() {
+  const user = await getSharedUser();
+  if (!user) return false;
+  try {
+    const supabase = await getClient();
+    const { data, error } = await supabase
+      .from('admins')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (error) return false;
+    return Boolean(data);
+  } catch {
+    return false;
   }
 }
 
@@ -282,7 +305,7 @@ export async function cardArtUrl(row) {
 // Publish a card: build the real PNG (embedded data, square art), upload it, then
 // record the row. If the row fails the file is removed again so storage does not
 // collect orphans.
-export async function shareCard(character, { visibility = 'public' } = {}) {
+export async function shareCard(character, { visibility = 'public', nsfw = false } = {}) {
   const supabase = await getClient();
   const user = await getSharedUser();
   if (!user) throw new Error('Sign in before publishing a card.');
@@ -311,6 +334,7 @@ export async function shareCard(character, { visibility = 'public' } = {}) {
     size: png.size || null,
     visibility: isPrivate ? 'private' : 'public',
     bucket,
+    nsfw: Boolean(nsfw),
   });
 
   if (rowError) {
@@ -323,7 +347,7 @@ export async function shareCard(character, { visibility = 'public' } = {}) {
 
 // Save an edit. The PNG embeds the card JSON, so changing a field means rebuilding
 // the file rather than editing a row that would then disagree with its download.
-export async function updateSharedCard(row, character, { visibility } = {}) {
+export async function updateSharedCard(row, character, { visibility, nsfw = false } = {}) {
   const supabase = await getClient();
   const user = await getSharedUser();
   if (!user) throw new Error('Sign in to edit a card.');
@@ -353,6 +377,7 @@ export async function updateSharedCard(row, character, { visibility } = {}) {
       size: png.size || null,
       visibility: nextVisibility,
       bucket,
+      nsfw: Boolean(nsfw),
     })
     .eq('id', row.id)
     .eq('user_id', user.id);
@@ -374,16 +399,15 @@ export async function updateSharedCard(row, character, { visibility } = {}) {
   return { path, url: publicUrl, visibility: nextVisibility };
 }
 
+// Deleting is gated by row policy rather than by this filter: an owner passes,
+// an admin passes for somebody else's card, everyone else is refused. Filtering on
+// user_id here would have silently made admin removals match zero rows.
 export async function deleteSharedCard(row) {
   const supabase = await getClient();
   const user = await getSharedUser();
   if (!user) throw new Error('Sign in to delete a card.');
 
-  const { error } = await supabase
-    .from('shared_cards')
-    .delete()
-    .eq('id', row.id)
-    .eq('user_id', user.id);
+  const { error } = await supabase.from('shared_cards').delete().eq('id', row.id);
   if (error) throw new Error(explain(error));
 
   // The row is gone either way; a missing file must not block the delete.

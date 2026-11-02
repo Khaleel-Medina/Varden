@@ -97,7 +97,13 @@
             <h2 id="sharedHeading">Shared cards</h2>
             <p class="field-note" id="sharedNote">Loading shared cards…</p>
           </div>
-          <button class="ghost-button" id="refreshShared" type="button">Refresh</button>
+          <div class="community-tools">
+            <label class="nsfw-toggle">
+              <input type="checkbox" id="showNsfw" />
+              <span>Show NSFW</span>
+            </label>
+            <button class="ghost-button" id="refreshShared" type="button">Refresh</button>
+          </div>
         </div>
         <div class="lib-shared-grid" id="sharedGrid"></div>
       </section>
@@ -275,6 +281,11 @@
           </label>
         </div>
 
+        <label class="nsfw-choice">
+          <input type="checkbox" id="shareNsfw" />
+          <span>Mark as <strong>NSFW</strong> — kept out of the feed unless the viewer turns the filter on.</span>
+        </label>
+
         <div class="dialog-actions">
           <button class="ghost-button" value="cancel" type="button" id="shareCancel">Cancel</button>
           <button class="solid-button" value="default" type="button" id="shareConfirm">Publish card</button>
@@ -319,6 +330,11 @@
             <option value="public">Public — listed in Community</option>
             <option value="private">Private — only you can open it</option>
           </select>
+        </label>
+
+        <label class="nsfw-choice">
+          <input type="checkbox" id="fUploadNsfw" />
+          <span>Mark as <strong>NSFW</strong></span>
         </label>
 
         <p class="field-note">
