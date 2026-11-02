@@ -160,6 +160,15 @@ const VENDOR_LABELS = {
 const vendorLabel = (slug) =>
   VENDOR_LABELS[slug] || slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+/* ---------------- keyless pool (third list, nothing to sign up for) ---------------- */
+
+// Pollinations answers without any credential at all: its /openai suffix is
+// OpenAI-shaped, streams SSE, and sends `access-control-allow-origin: *`, so a
+// static page can use it directly. It is a shared free pool, not a provider with an
+// account behind it, so the UI keeps it visually separate and says what that means.
+const KEYLESS_BASE = 'https://text.pollinations.ai';
+const KEYLESS_FALLBACK = ['openai-fast'];
+
 const DEFAULT_SETTINGS = {
   modelId: DEFAULT_MODEL,
   temperature: 0.85,
@@ -168,6 +177,7 @@ const DEFAULT_SETTINGS = {
   personaId: null,
   characterId: null,
   hostedModel: null,
+  keylessModel: null,
 };
 
 const state = {
@@ -190,6 +200,7 @@ const state = {
   memories: [],
   hosted: { key: '', models: [], loading: false, error: null, status: '' },
   hostedAbort: null,
+  keyless: { models: [], loading: false, error: null, status: '' },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -250,6 +261,11 @@ const els = {
   hostedForget: $('hostedForgetBtn'),
   hostedRefresh: $('hostedRefreshBtn'),
   hostedStatus: $('hostedStatus'),
+  keylessSelect: $('keylessSelect'),
+  keylessNote: $('keylessNote'),
+  keylessUse: $('keylessUseBtn'),
+  keylessRefresh: $('keylessRefreshBtn'),
+  keylessStatus: $('keylessStatus'),
 };
 
 /* ---------------- settings ---------------- */
@@ -267,6 +283,9 @@ function loadSettings() {
   if (typeof state.settings.hostedModel !== 'string' || !state.settings.hostedModel.includes('/')) {
     state.settings.hostedModel = null;
   }
+  if (typeof state.settings.keylessModel !== 'string' || !state.settings.keylessModel.trim()) {
+    state.settings.keylessModel = null;
+  }
 }
 
 function saveSettings() {
@@ -281,7 +300,6 @@ function saveSettings() {
 
 const hostedActive = () => Boolean(state.settings.hostedModel);
 const hostedEntry = (id) => state.hosted.models.find((model) => model.id === id) || null;
-
 function hostedModelLabel() {
   const entry = hostedEntry(state.settings.hostedModel);
   return entry ? entry.name : state.settings.hostedModel || 'Hosted model';
@@ -444,6 +462,125 @@ async function* hostedStream(prompt) {
     throw new Error(`Hosted request failed (${response.status}) ${detail.slice(0, 300)}`.trim());
   }
   if (!response.body) throw new Error('The hosted provider returned no stream.');
+  yield* sseChunks(response, controller);
+}
+
+/* ---------------- keyless pool plumbing ---------------- */
+
+const keylessActive = () => Boolean(state.settings.keylessModel);
+const keylessEntry = (id) => state.keyless.models.find((model) => model.id === id) || null;
+
+function keylessLabel() {
+  const entry = keylessEntry(state.settings.keylessModel);
+  return entry ? entry.name : state.settings.keylessModel || 'Free endpoint';
+}
+
+function buildKeylessSelect() {
+  if (!els.keylessSelect) return;
+  if (!state.keyless.models.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = state.keyless.loading ? 'Loading the free list…' : 'No free models available';
+    els.keylessSelect.replaceChildren(option);
+    renderKeylessNote();
+    return;
+  }
+  els.keylessSelect.replaceChildren(
+    ...state.keyless.models.map((model) => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.name;
+      if (model.description) option.title = model.description;
+      return option;
+    })
+  );
+  const wanted = state.settings.keylessModel;
+  els.keylessSelect.value = state.keyless.models.some((model) => model.id === wanted)
+    ? wanted
+    : state.keyless.models[0].id;
+  renderKeylessNote();
+}
+
+function renderKeylessNote() {
+  if (!els.keylessNote) return;
+  const entry = keylessEntry(els.keylessSelect.value) || keylessEntry(state.settings.keylessModel);
+  els.keylessNote.textContent = entry
+    ? `${entry.name} on a shared free pool: no key, no billing, no privacy — the pool picks the model that answers.`
+    : 'No free alias is known right now; press Refresh list.';
+}
+
+function renderKeylessStatus() {
+  if (!els.keylessStatus) return;
+  const bits = [];
+  if (keylessActive()) {
+    bits.push(
+      `Active: ${keylessLabel()}. Replies come from the shared pool — nothing is billed, and nothing is private. Choose a model in either list above to switch back.`
+    );
+  }
+  if (state.keyless.loading) bits.push('Loading the free list…');
+  if (state.keyless.error) bits.push(state.keyless.error);
+  if (state.keyless.status) bits.push(state.keyless.status);
+  if (!bits.length) bits.push('No account needed. The pool can be busy, and it changes without notice.');
+  els.keylessStatus.textContent = bits.join(' ');
+  syncControls();
+}
+
+async function loadKeylessModels() {
+  if (state.keyless.loading) return;
+  state.keyless.loading = true;
+  renderKeylessStatus();
+  buildKeylessSelect();
+  try {
+    const response = await fetch(`${KEYLESS_BASE}/models`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`the list returned ${response.status}`);
+    const payload = await response.json();
+    const list = Array.isArray(payload) ? payload : payload?.models || [];
+    const models = list
+      .map((entry) =>
+        typeof entry === 'string'
+          ? { id: entry, name: entry }
+          : { id: entry?.id || entry?.name, name: entry?.name || entry?.id, description: entry?.description || '' }
+      )
+      .filter((model) => model.id);
+    state.keyless.models = models.length ? models : KEYLESS_FALLBACK.map((id) => ({ id, name: id }));
+    state.keyless.error = null;
+  } catch (error) {
+    state.keyless.models = KEYLESS_FALLBACK.map((id) => ({ id, name: id }));
+    state.keyless.error = `The free list could not be read (${error?.message || error}); using the known alias.`;
+  } finally {
+    state.keyless.loading = false;
+    buildKeylessSelect();
+    renderKeylessStatus();
+  }
+}
+
+async function* keylessStream(prompt) {
+  const controller = new AbortController();
+  state.hostedAbort = controller;
+  const response = await fetch(`${KEYLESS_BASE}/openai`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    body: JSON.stringify({
+      model: state.settings.keylessModel,
+      messages: prompt.messages,
+      stream: true,
+      temperature: Number(state.settings.temperature),
+      top_p: Number(state.settings.topP),
+      max_tokens: Number(state.settings.maxTokens),
+    }),
+    signal: controller.signal,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Keyless request failed (${response.status}) ${detail.slice(0, 300)}`.trim());
+  }
+  if (!response.body) throw new Error('The free endpoint returned no stream.');
+  yield* sseChunks(response, controller);
+}
+
+// Both streaming paths speak the same server-sent-events dialect, so the reader
+// lives in one place: text arrives OpenAI-shaped either way.
+async function* sseChunks(response, controller) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -465,7 +602,7 @@ async function* hostedStream(prompt) {
         } catch {
           continue;
         }
-        if (chunk.error) throw new Error(chunk.error.message || 'The hosted provider returned an error.');
+        if (chunk.error) throw new Error(chunk.error.message || 'The provider returned an error.');
         yield chunk;
       }
       if (state.stopRequested) {
@@ -1087,6 +1224,11 @@ function updateModelNote() {
 }
 
 function syncModelChip() {
+  if (keylessActive()) {
+    els.modelChip.textContent = `${keylessLabel()} · free pool`;
+    els.modelChip.dataset.state = 'ready';
+    return;
+  }
   if (hostedActive()) {
     els.modelChip.textContent = `${hostedModelLabel()} · hosted`;
     els.modelChip.dataset.state = 'ready';
@@ -1211,6 +1353,15 @@ function describeError(error) {
   if (/device.?lost|lost device|DEVICE_REMOVED|device removed/i.test(message)) {
     return 'The WebGPU device was closed by the browser, usually from running out of GPU memory. Load the smallest model and try again; the previous engine cannot be reused.';
   }
+  if (/Keyless request failed \(402\)/i.test(message)) {
+    return 'That free alias now wants payment. Pick another alias from the keyless list, or switch to a hosted model with your own key.';
+  }
+  if (/Keyless request failed \(429\)|queue is full/i.test(message)) {
+    return 'The shared free endpoint is busy right now. Wait a moment and send again, or switch to a local model.';
+  }
+  if (/Keyless request failed \(\d+\)/i.test(message)) {
+    return `The shared free endpoint refused that request. ${message.slice(0, 200)}`;
+  }
   if (/^No hosted API key/i.test(message)) {
     return 'No hosted key in this browser yet. Create one at openrouter.ai/keys and paste it into the Hosted models panel — it stays on this device.';
   }
@@ -1252,7 +1403,7 @@ function describeError(error) {
 
 function syncControls() {
   const busy = state.generating;
-  const ready = Boolean(state.webgpu?.ok) || hostedActive();
+  const ready = Boolean(state.webgpu?.ok) || hostedActive() || keylessActive();
   els.send.disabled = busy || !ready;
   els.continue.disabled = busy || !ready || !state.chat?.messages.some((message) => message.role === 'assistant');
   els.stop.hidden = !busy;
@@ -1280,11 +1431,11 @@ async function sendMessage(rawText) {
   if (state.generating || !state.chat) return;
   const text = String(rawText || '').trim();
   if (!text) return;
-  if (!state.webgpu?.ok && !hostedActive()) {
+  if (!state.webgpu?.ok && !hostedActive() && !keylessActive()) {
     els.notice.hidden = false;
     els.notice.textContent =
       state.webgpu?.message ||
-      'WebGPU is unavailable here, so local models cannot run. Pick a hosted model in the panel, or use a browser with WebGPU.';
+      'WebGPU is unavailable here, so local models cannot run. Pick a hosted model or the keyless pool in the panel.';
     return;
   }
   els.input.value = '';
@@ -1360,11 +1511,17 @@ async function generate({ mode = 'reply', index = null } = {}) {
   try {
     // Both paths hand back the same async iterable of OpenAI-shaped chunks, so the
     // streaming loop below does not care which one produced it.
-    const stream = hostedActive() ? hostedStream(prompt) : await createLocalStream(prompt);
+    const stream = keylessActive()
+      ? keylessStream(prompt)
+      : hostedActive()
+        ? hostedStream(prompt)
+        : await createLocalStream(prompt);
 
     els.genStatus.hidden = false;
     els.genStatus.classList.add('busy');
-    els.genText.textContent = hostedActive()
+    els.genText.textContent = keylessActive()
+      ? `Generating on the shared free endpoint · ${keylessLabel()}`
+      : hostedActive()
       ? `Generating with ${hostedModelLabel()} · billed to your key`
       : prompt.dropped
         ? `Generating on your GPU · ${prompt.dropped} older message${prompt.dropped === 1 ? '' : 's'} trimmed for context`
@@ -1703,14 +1860,17 @@ function bindEvents() {
 
   els.modelSelect.addEventListener('change', () => {
     state.settings.modelId = els.modelSelect.value;
-    // Choosing from the GPU list is also how you switch back from a hosted model.
+    // Choosing from the GPU list is also how you switch back from either remote list.
     state.settings.hostedModel = null;
+    state.settings.keylessModel = null;
     state.hosted.status = '';
+    state.keyless.status = '';
     saveSettings();
     updateModelNote();
     syncModelChip();
     syncControls();
     renderHostedStatus();
+    renderKeylessStatus();
   });
 
   els.hostedSelect?.addEventListener('change', renderHostedNote);
@@ -1740,10 +1900,13 @@ function bindEvents() {
       return;
     }
     state.settings.hostedModel = id;
+    state.settings.keylessModel = null;
     state.hosted.status = '';
+    state.keyless.status = '';
     saveSettings();
     syncModelChip();
     renderHostedStatus();
+    renderKeylessStatus();
     els.notice.hidden = true;
   });
   els.hostedForget?.addEventListener('click', () => {
@@ -1756,6 +1919,30 @@ function bindEvents() {
   els.hostedRefresh?.addEventListener('click', () => {
     state.hosted.status = '';
     loadHostedModels();
+  });
+
+  els.keylessSelect?.addEventListener('change', renderKeylessNote);
+  els.keylessUse?.addEventListener('click', () => {
+    const id = els.keylessSelect.value;
+    if (!id) {
+      state.keyless.status = 'There is no free alias to use right now.';
+      renderKeylessStatus();
+      return;
+    }
+    state.settings.keylessModel = id;
+    // Exactly one route at a time, so a hosted key is never quietly used instead.
+    state.settings.hostedModel = null;
+    state.keyless.status = '';
+    state.hosted.status = '';
+    saveSettings();
+    syncModelChip();
+    renderHostedStatus();
+    renderKeylessStatus();
+    els.notice.hidden = true;
+  });
+  els.keylessRefresh?.addEventListener('click', () => {
+    state.keyless.status = '';
+    loadKeylessModels();
   });
 
   els.personaSelect.addEventListener('change', () => {
@@ -1834,6 +2021,7 @@ async function init() {
   buildModelSelect();
   loadHostedKey();
   buildHostedSelect();
+  buildKeylessSelect();
   bindEvents();
   syncSettingsUi();
 
@@ -1850,9 +2038,12 @@ async function init() {
   await detectWebGPU();
   renderGpuState();
   renderHostedStatus();
-  // The hosted catalog is a public, keyless request, so it loads even without WebGPU.
+  renderKeylessStatus();
+  // Both catalogs are public requests with no credentials, so they load even when
+  // WebGPU is missing entirely.
   setTimeout(() => {
     loadHostedModels();
+    loadKeylessModels();
   }, 600);
 
   const params = new URLSearchParams(window.location.search);

@@ -133,6 +133,25 @@
           <p class="field-note hosted-status" id="hostedStatus" role="status"></p>
         </section>
 
+        <section class="panel-block keyless-block">
+          <p class="eyebrow">Keyless models <span class="keyless-badge">no key · shared</span></p>
+          <p class="field-note">
+            A third list, separate from both above: a public endpoint anyone can call without an account. Nothing is
+            billed, but nothing is private either — the scene goes to a shared pool run by someone else, at whatever
+            speed their queue allows, and it can change without notice.
+          </p>
+          <label class="field">
+            Free model
+            <select id="keylessSelect"></select>
+          </label>
+          <p class="field-note" id="keylessNote"></p>
+          <div class="panel-actions">
+            <button class="solid-button" id="keylessUseBtn" type="button">Use free endpoint</button>
+            <button class="ghost-button" id="keylessRefreshBtn" type="button">Refresh list</button>
+          </div>
+          <p class="field-note keyless-status" id="keylessStatus" role="status"></p>
+        </section>
+
         <section class="panel-block">
           <p class="eyebrow">You in this scene</p>
           <label class="field">
@@ -177,7 +196,7 @@
 
         <p class="panel-foot">
           Local models, cards and chats live in this browser: nothing is uploaded and there is no message cap. Hosted
-          models are the exception — the scene is sent to the provider you pick, using your own key.
+          models send the scene to the provider whose key you use; the keyless pool sends it to a shared free endpoint.
         </p>
       </aside>
     </div>

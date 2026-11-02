@@ -217,3 +217,20 @@ catalog. Those models run on other companies' servers through OpenRouter.
 
 Regression checks worth knowing: the hosted path must work with WebGPU absent, Stop must abort the request rather than
 just stop rendering, and a 401/402/429 must explain itself instead of showing raw JSON.
+
+## Keyless models (third list, nothing to sign up for)
+
+The chat panel has a third model list, styled amber and kept separate from the GPU catalog and the OpenRouter list,
+because its promise is different: it works with no key and no account, but it is not private.
+
+- Endpoint: `https://text.pollinations.ai` (`POST /openai`, `GET /models`). It answers with no `Authorization` header,
+  sends `access-control-allow-origin: *` and returns 204 on the POST preflight, so a static page can call it directly.
+- Replies stream as ordinary SSE `chat.completion.chunk` events, so they reuse the same reader as the hosted path.
+- The alias list comes from `GET /models` and falls back to `openai-fast` when that request fails. Aliases are not
+  vendors: `openai` and `openai-fast` both resolve to whatever the pool has (observed: `gpt-oss-20b`), and some names
+  (e.g. `gpt-4o-mini`) answer `402 Payment Required` — those are not free.
+- The UI says plainly that the scene leaves the browser, that there is no billing and no privacy, and that the pool can
+  be busy or change without notice. Local GPU remains the default and the only private route.
+- Errors: 402 is reported as "that alias wants payment", 429 as "the pool is busy", anything else surfaces its status.
+
+Nothing here is billed to the owner and nothing needs maintaining: no key, no server, no account.

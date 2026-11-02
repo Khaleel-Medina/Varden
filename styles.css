@@ -2984,3 +2984,30 @@ body.dragging {
 .hosted-status {
   color: var(--teal);
 }
+
+/* The keyless pool gets its own amber treatment: it works without a key, but it is
+   shared and unaccountable, so it must not read like either list above it. */
+.keyless-block {
+  border-left: 2px solid #e0a953;
+  padding-left: 14px;
+}
+
+.keyless-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(224, 169, 83, 0.16);
+  color: #e0a953;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.keyless-block .panel-actions {
+  flex-wrap: wrap;
+}
+
+.keyless-status {
+  color: #e0a953;
+}
