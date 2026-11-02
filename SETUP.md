@@ -238,3 +238,40 @@ because its promise is different: it works with no key and no account, but it is
 - Errors: 402 is reported as "that alias wants payment", 429 as "the pool is busy", anything else surfaces its status.
 
 Nothing here is billed to the owner and nothing needs maintaining: no key, no server, no account.
+
+## Devices (optional hardware, off by default)
+
+The **Devices** section in the chat panel can drive a toy while a reply streams. It is collapsed, off, and changes
+nothing about a chat that never opens it. The privacy promise is the point: only intensity numbers leave the page —
+the reply text, the character card and the persona are never sent to a device or to a toy vendor. That also means it
+works on the local GPU route, where no network is used at all.
+
+The reaction is arithmetic over the stream, not another model call (`Reaction` in `devices.js`): characters per second
+sets the base, punctuation and asterisked asides add heat, attack 0.45 / release 0.16 smooths it, and the panel's
+intensity cap (default 60%) clips the top. No extra tokens are spent, and a card cannot talk the toy into more.
+
+Three transports, because they are genuinely different deals:
+
+- **Lovense Game Mode** — the visitor's phone or PC runs Lovense Remote with Game Mode on, which exposes a local
+  server. There is no key, no account and no cloud. Commands go to
+  `https://{ip-with-dashes}.lovense.club:30010/command`: the wildcard cert for that domain is what makes a local
+  device reachable from an HTTPS page without mixed-content blocking. `GetToys` discovers the toy, then `Function`
+  with `Vibrate:0-20`. Note Chrome's Local Network Access permission (Chrome 142+) prompts once before a public site
+  may reach the LAN; declining it is a normal outcome, not a bug.
+- **Intiface Central (desktop)** — any buttplug.io-compatible toy, connected in Intiface, over
+  `ws://127.0.0.1:12345`. Nothing leaves the machine and the localhost exception means no mixed-content problem. Costs
+  the visitor a desktop install.
+- **The Handy** — the vendor's cloud (`https://www.handyfeeling.com/api/handy/v2/`) with the visitor's connection key
+  and, if their developer portal issued one, an app key. HAMP mode (`mode: 0`) with velocity 0-100. Unlike the two
+  above this needs no local anything, but commands travel over the internet and the stroker keeps running if the tab
+  dies — the panel says so, and Stop is the documented exit.
+
+Safety rules the code enforces: never an indefinite hold (Lovense gets `timeSec: 2`, refreshed every 1.5 s, so a
+closed tab stops moving within two seconds), Stop / tab hidden / `pagehide` / end of reply / disconnect all send a
+stop, and three failed commands in a row stop the device and say so.
+
+Unverified in this environment: neither a toy nor a LAN is available here, so the Lovense path has never been executed
+against real hardware, and whether Game Mode answers CORS for a foreign origin is unconfirmed. The client copes with
+the likely cases — `text/plain` is tried before `application/json` so a local server that cannot answer an `OPTIONS`
+preflight still works, and the plain HTTP port is used only from a page served over HTTP. If a real toy still cannot be
+reached, the next step is a tiny local relay rather than a hosted proxy, which would mean upkeep.

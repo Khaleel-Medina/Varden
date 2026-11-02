@@ -3046,3 +3046,88 @@ body.dragging {
   flex-wrap: wrap;
   margin-top: 0;
 }
+
+/* Devices: neither a model route nor a privacy trade-off, so it gets its own colour
+   rather than borrowing the teal or the amber. Collapsed by default — nobody should
+   meet hardware setup unless they went looking for it. */
+.device-block {
+  border-left: 2px solid #b07be0;
+  padding-left: 14px;
+}
+
+.device-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(176, 123, 224, 0.16);
+  color: #b07be0;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.device-details > summary {
+  color: var(--muted, #9aa0a6);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.device-details > summary:hover {
+  color: #b07be0;
+}
+
+.device-fields[hidden] {
+  display: none;
+}
+
+.device-block .panel-actions {
+  flex-wrap: wrap;
+}
+
+.device-block .field input[type='password'] {
+  font-size: 0.86rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.device-status {
+  color: #b07be0;
+}
+
+.device-confirm {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(176, 123, 224, 0.42);
+  background: rgba(176, 123, 224, 0.08);
+}
+
+.device-confirm[hidden] {
+  display: none;
+}
+
+.device-confirm-title {
+  margin: 0 0 6px;
+  color: #b07be0;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.device-confirm-body {
+  margin: 0 0 10px;
+  color: var(--muted, #9aa0a6);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.device-confirm .panel-actions {
+  flex-wrap: wrap;
+  margin-top: 0;
+}

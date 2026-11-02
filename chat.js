@@ -27,6 +27,7 @@ import {
   relevantMemories,
   saveMemory,
 } from './cards.js';
+import { createDevices } from './devices.js';
 
 const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
 const SETTINGS_KEY = 'varden-chat-settings';
@@ -179,6 +180,16 @@ const DEFAULT_SETTINGS = {
   hostedModel: null,
   keylessModel: null,
   keylessConfirmed: false,
+  device: {
+    kind: 'off',
+    lovenseHost: '',
+    lovensePort: 30010,
+    buttplugUrl: 'ws://127.0.0.1:12345',
+    handyKey: '',
+    handyAppKey: '',
+    cap: 60,
+    confirmed: false,
+  },
 };
 
 const state = {
@@ -202,6 +213,8 @@ const state = {
   hosted: { key: '', models: [], loading: false, error: null, status: '' },
   hostedAbort: null,
   keyless: { models: [], loading: false, error: null, status: '' },
+  devices: null,
+  deviceStatus: '',
 };
 
 const $ = (id) => document.getElementById(id);
@@ -270,6 +283,25 @@ const els = {
   keylessConfirm: $('keylessConfirm'),
   keylessConfirmYes: $('keylessConfirmYes'),
   keylessConfirmCancel: $('keylessConfirmCancel'),
+  deviceKind: $('deviceKind'),
+  deviceFieldsLovense: $('deviceFieldsLovense'),
+  deviceFieldsButtplug: $('deviceFieldsButtplug'),
+  deviceFieldsHandy: $('deviceFieldsHandy'),
+  lovenseHost: $('lovenseHost'),
+  lovensePort: $('lovensePort'),
+  buttplugUrl: $('buttplugUrl'),
+  handyKey: $('handyKey'),
+  handyAppKey: $('handyAppKey'),
+  deviceMax: $('deviceMax'),
+  deviceMaxOut: $('deviceMaxOut'),
+  deviceConnect: $('deviceConnectBtn'),
+  deviceStop: $('deviceStopBtn'),
+  deviceDisconnect: $('deviceDisconnectBtn'),
+  deviceConfirm: $('deviceConfirm'),
+  deviceConfirmBody: $('deviceConfirmBody'),
+  deviceConfirmYes: $('deviceConfirmYes'),
+  deviceConfirmCancel: $('deviceConfirmCancel'),
+  deviceStatus: $('deviceStatus'),
 };
 
 /* ---------------- settings ---------------- */
@@ -293,6 +325,27 @@ function loadSettings() {
   // A remembered route only survives if it was confirmed once. Without this, a new
   // session could start shipping scenes off the device that was never asked.
   if (state.settings.keylessConfirmed !== true) state.settings.keylessModel = null;
+
+  const savedDevice = state.settings.device;
+  state.settings.device = {
+    ...DEFAULT_SETTINGS.device,
+    ...(savedDevice && typeof savedDevice === 'object' && !Array.isArray(savedDevice) ? savedDevice : null),
+  };
+  const device = state.settings.device;
+  if (!DEVICE_KINDS.includes(device.kind)) device.kind = 'off';
+  device.cap = clampSetting(device.cap, 60);
+  device.lovensePort = clampSetting(device.lovensePort, 30010, 1, 65535);
+  device.confirmed = device.confirmed === true;
+  if (typeof device.lovenseHost !== 'string') device.lovenseHost = '';
+  if (typeof device.buttplugUrl !== 'string') device.buttplugUrl = 'ws://127.0.0.1:12345';
+  if (typeof device.handyKey !== 'string') device.handyKey = '';
+  if (typeof device.handyAppKey !== 'string') device.handyAppKey = '';
+}
+
+function clampSetting(value, fallback, low = 5, high = 100) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.min(high, Math.max(low, number));
 }
 
 function saveSettings() {
@@ -1428,6 +1481,101 @@ function describeError(error) {
   return `Generation failed: ${message}`;
 }
 
+/* ---------------- devices ---------------- */
+
+const DEVICE_KINDS = ['off', 'lovense', 'buttplug', 'handy'];
+
+const DEVICE_CONFIRM_COPY = {
+  lovense:
+    'From now on the toy reacts while a reply streams in, and it stops when the reply ends or this tab goes to the background. Only intensity numbers are sent to the Lovense app on your network — never the words.',
+  buttplug:
+    'From now on the toy reacts while a reply streams in, and it stops when the reply ends or this tab goes to the background. Commands stay on this computer, inside Intiface — only intensity numbers, never the words.',
+  handy:
+    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key, and they carry only speed values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
+};
+
+const deviceConfig = () => state.settings.device;
+
+function setDeviceStatus(text) {
+  state.deviceStatus = text || '';
+  renderDeviceStatus();
+}
+
+function buildDeviceUi() {
+  const config = deviceConfig();
+  if (els.deviceKind) els.deviceKind.value = DEVICE_KINDS.includes(config.kind) ? config.kind : 'off';
+  if (els.lovenseHost) els.lovenseHost.value = config.lovenseHost;
+  if (els.lovensePort) els.lovensePort.value = String(config.lovensePort);
+  if (els.buttplugUrl) els.buttplugUrl.value = config.buttplugUrl;
+  if (els.handyKey) els.handyKey.value = config.handyKey;
+  if (els.handyAppKey) els.handyAppKey.value = config.handyAppKey;
+  if (els.deviceMax) els.deviceMax.value = String(config.cap);
+  if (els.deviceMaxOut) els.deviceMaxOut.value = String(config.cap);
+  renderDeviceFields();
+  renderDeviceStatus();
+}
+
+function renderDeviceFields() {
+  const kind = deviceConfig().kind;
+  if (els.deviceFieldsLovense) els.deviceFieldsLovense.hidden = kind !== 'lovense';
+  if (els.deviceFieldsButtplug) els.deviceFieldsButtplug.hidden = kind !== 'buttplug';
+  if (els.deviceFieldsHandy) els.deviceFieldsHandy.hidden = kind !== 'handy';
+  if (els.deviceConfirmBody) els.deviceConfirmBody.textContent = DEVICE_CONFIRM_COPY[kind] || '';
+  syncDeviceControls();
+}
+
+function syncDeviceControls() {
+  const connected = Boolean(state.devices?.connected);
+  if (els.deviceConnect) els.deviceConnect.disabled = connected;
+  if (els.deviceStop) els.deviceStop.disabled = !connected;
+  if (els.deviceDisconnect) els.deviceDisconnect.disabled = !connected;
+  if (els.deviceKind) els.deviceKind.disabled = connected;
+}
+
+function renderDeviceStatus() {
+  if (!els.deviceStatus) return;
+  const bits = [];
+  if (state.devices?.connected) {
+    bits.push(`Connected: ${state.devices.label}. It reacts while a reply streams and stops when the reply ends.`);
+  } else if (deviceConfig().kind !== 'off') {
+    bits.push('Not connected yet.');
+  }
+  if (state.deviceStatus) bits.push(state.deviceStatus);
+  if (!bits.length) bits.push('Nothing connected. Chat works exactly the same without a device.');
+  els.deviceStatus.textContent = bits.join(' ');
+  syncDeviceControls();
+}
+
+function setDeviceConfirm(open) {
+  if (!els.deviceConfirm) return;
+  els.deviceConfirm.hidden = !open;
+  if (open) els.deviceConfirmYes?.focus();
+}
+
+// Connecting is the consent: nothing is opened until this runs, and the first time it
+// explains what will move before it does.
+async function connectDevice() {
+  const config = deviceConfig();
+  if (config.kind === 'off') {
+    setDeviceStatus('Pick a device in the list first.');
+    return;
+  }
+  if (config.confirmed !== true) {
+    setDeviceConfirm(true);
+    return;
+  }
+  setDeviceConfirm(false);
+  setDeviceStatus('Looking for the device…');
+  try {
+    const label = await state.devices.connect({ ...config, pageProtocol: window.location.protocol });
+    setDeviceStatus(`Connected to ${label}.`);
+  } catch (error) {
+    setDeviceStatus(String(error?.message || error || 'Could not connect to the device.'));
+    console.warn('Varden: device connect failed', error);
+  }
+  renderDeviceStatus();
+}
+
 /* ---------------- generation ---------------- */
 
 function syncControls() {
@@ -1546,6 +1694,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
         ? hostedStream(prompt)
         : await createLocalStream(prompt);
 
+    state.devices?.begin();
     els.genStatus.hidden = false;
     els.genStatus.classList.add('busy');
     els.genText.textContent = keylessActive()
@@ -1563,6 +1712,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
         if (!firstTokenAt) firstTokenAt = performance.now();
         text += delta;
         setMessageText(target, text);
+        state.devices?.feed(delta);
         scheduleStream(targetIndex, text);
       }
       if (chunk?.usage) usage = chunk.usage;
@@ -1595,6 +1745,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
       target.error = state.stopRequested ? 'Stopped before the first token.' : 'The model returned an empty reply. Try again.';
     }
     setMessageText(target, text);
+    void state.devices?.finish();
     state.generating = false;
     state.stopRequested = false;
     els.genStatus.classList.remove('busy');
@@ -1641,6 +1792,8 @@ function scheduleStream(index, text) {
 function stopGeneration() {
   if (!state.generating) return;
   state.stopRequested = true;
+  // Stop means stop, for the device as well as the model.
+  state.devices?.stopNow();
   els.genText.textContent = 'Stopping…';
   try {
     state.hostedAbort?.abort();
@@ -1987,6 +2140,65 @@ function bindEvents() {
     loadKeylessModels();
   });
 
+  els.deviceKind?.addEventListener('change', () => {
+    deviceConfig().kind = els.deviceKind.value;
+    deviceConfig().confirmed = false;
+    saveSettings();
+    setDeviceConfirm(false);
+    renderDeviceFields();
+    renderDeviceStatus();
+  });
+  const saveDeviceField = (key, element, transform) => {
+    if (!element) return;
+    element.addEventListener('input', () => {
+      deviceConfig()[key] = transform ? transform(element.value) : element.value;
+      saveSettings();
+    });
+  };
+  saveDeviceField('lovenseHost', els.lovenseHost);
+  saveDeviceField('lovensePort', els.lovensePort, (value) => clampSetting(value, 30010, 1, 65535));
+  saveDeviceField('buttplugUrl', els.buttplugUrl);
+  saveDeviceField('handyKey', els.handyKey);
+  saveDeviceField('handyAppKey', els.handyAppKey);
+  els.deviceMax?.addEventListener('input', () => {
+    deviceConfig().cap = clampSetting(els.deviceMax.value, 60);
+    if (els.deviceMaxOut) els.deviceMaxOut.value = String(deviceConfig().cap);
+    // Saving the number is not the same as letting it move: the cap only applies to a
+    // device that is already connected.
+    state.devices?.setCap(deviceConfig().cap);
+    saveSettings();
+  });
+  els.deviceConnect?.addEventListener('click', () => {
+    void connectDevice();
+  });
+  els.deviceConfirmYes?.addEventListener('click', () => {
+    deviceConfig().confirmed = true;
+    saveSettings();
+    void connectDevice();
+  });
+  els.deviceConfirmCancel?.addEventListener('click', () => {
+    setDeviceConfirm(false);
+    setDeviceStatus('Nothing was connected.');
+  });
+  els.deviceStop?.addEventListener('click', () => {
+    state.devices?.stopNow();
+    setDeviceStatus('Stopped.');
+  });
+  els.deviceDisconnect?.addEventListener('click', () => {
+    void (async () => {
+      await state.devices?.disconnect();
+      setDeviceStatus('Disconnected.');
+      renderDeviceStatus();
+    })();
+  });
+
+  // A reply that keeps driving a toy while the tab is hidden or closing is the failure
+  // mode worth designing against.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) state.devices?.stopNow();
+  });
+  window.addEventListener('pagehide', () => state.devices?.stopNow());
+
   els.personaSelect.addEventListener('change', () => {
     state.settings.personaId = els.personaSelect.value;
     saveSettings();
@@ -2064,6 +2276,8 @@ async function init() {
   loadHostedKey();
   buildHostedSelect();
   buildKeylessSelect();
+  state.devices = createDevices({ onStatus: setDeviceStatus });
+  buildDeviceUi();
   bindEvents();
   syncSettingsUi();
 

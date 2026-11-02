@@ -166,6 +166,93 @@
           <p class="field-note keyless-status" id="keylessStatus" role="status"></p>
         </section>
 
+        <section class="panel-block device-block">
+          <p class="eyebrow">Devices <span class="device-badge">optional</span></p>
+          <p class="field-note">
+            Optional: let the scene drive a toy you own as the reply arrives. It works on every route, including the
+            local GPU one, because only intensity numbers ever leave this page — never the words, the card or the
+            persona. Off by default, and nothing moves until you press Connect.
+          </p>
+          <details class="device-details">
+            <summary>Set up a device</summary>
+            <label class="field">
+              Which device
+              <select id="deviceKind">
+                <option value="off">Nothing connected</option>
+                <option value="lovense">Lovense toy · Game Mode</option>
+                <option value="buttplug">Any toy via Intiface Central (desktop)</option>
+                <option value="handy">The Handy · cloud API</option>
+              </select>
+            </label>
+
+            <div class="device-fields" id="deviceFieldsLovense" hidden>
+              <label class="field">
+                Lovense Remote address
+                <input id="lovenseHost" type="text" autocomplete="off" spellcheck="false" placeholder="192.168.1.24" />
+              </label>
+              <p class="field-note">
+                Phone or PC running Lovense Remote with Game Mode switched on: the app shows a LAN IP, and that is what
+                goes here. Your browser will ask once for permission to reach the local network.
+              </p>
+              <label class="field">
+                Port <span class="field-hint">30010 unless the app says otherwise</span>
+                <input id="lovensePort" type="number" min="1" max="65535" step="1" value="30010" />
+              </label>
+            </div>
+
+            <div class="device-fields" id="deviceFieldsButtplug" hidden>
+              <label class="field">
+                Intiface server
+                <input id="buttplugUrl" type="text" autocomplete="off" spellcheck="false" value="ws://127.0.0.1:12345" />
+              </label>
+              <p class="field-note">
+                Runs on this computer, so nothing leaves the machine and no browser permission is needed. Install
+                Intiface Central, start its server, and connect the toy there first.
+              </p>
+            </div>
+
+            <div class="device-fields" id="deviceFieldsHandy" hidden>
+              <label class="field">
+                Connection key
+                <input id="handyKey" type="password" autocomplete="off" spellcheck="false" placeholder="from the Handy app" />
+              </label>
+              <label class="field">
+                App key <span class="field-hint">from the Handy developer portal</span>
+                <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional" />
+              </label>
+              <p class="field-note">
+                Unlike the two above, The Handy is driven through its vendor's cloud, so commands travel over the
+                internet and the connection key identifies your device to them. Still only intensity and speed — no
+                text. The stroker keeps running if this tab dies, so Stop is not optional here.
+              </p>
+            </div>
+
+            <label class="field slider-field">
+              <span>Intensity cap <output id="deviceMaxOut">60</output>%</span>
+              <input id="deviceMax" type="range" min="5" max="100" step="5" value="60" />
+            </label>
+
+            <div class="panel-actions">
+              <button class="solid-button" id="deviceConnectBtn" type="button">Connect</button>
+              <button class="ghost-button" id="deviceStopBtn" type="button" disabled>Stop</button>
+              <button class="ghost-button" id="deviceDisconnectBtn" type="button" disabled>Disconnect</button>
+            </div>
+
+            <div class="device-confirm" id="deviceConfirm" hidden>
+              <p class="device-confirm-title">Connect something that moves?</p>
+              <p class="device-confirm-body" id="deviceConfirmBody">
+                From now on the device reacts while a reply streams in, and it stops when the reply ends or this tab
+                goes to the background. Only numbers are sent. Nothing about the scene leaves this page for the device.
+              </p>
+              <div class="panel-actions">
+                <button class="solid-button" id="deviceConfirmYes" type="button">Yes, connect it</button>
+                <button class="ghost-button" id="deviceConfirmCancel" type="button">Not now</button>
+              </div>
+            </div>
+          </details>
+          <p class="field-note device-status" id="deviceStatus" role="status"></p>
+        </section>
+
         <section class="panel-block">
           <p class="eyebrow">You in this scene</p>
           <label class="field">
@@ -211,6 +298,7 @@
         <p class="panel-foot">
           Local models, cards and chats live in this browser: nothing is uploaded and there is no message cap. Hosted
           models send the scene to the provider whose key you use; the keyless pool sends it to a shared free endpoint.
+          A connected device only ever receives intensity numbers.
         </p>
       </aside>
     </div>
