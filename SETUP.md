@@ -189,3 +189,12 @@ Run `supabase-nsfw-admin.sql` after the accounts migration (idempotent). It adds
 Revoke with `delete from public.admins where user_id = '<uuid>';`
 
 The role only widens deletion — admins do **not** gain read access to other people's private drafts.
+
+## Phones and tablets
+
+A phone reports the same WebGPU features as a laptop but gets a much smaller memory budget, and when it runs out the
+GPU process is torn down instead of raising an allocation error — which surfaces as
+`mapAsync … Buffer was unmapped before mapping was resolved`. The picker detects a phone-class device and caps the list
+at about 1.7 GB of weights (Qwen2.5 0.5B, Llama 3.2 1B f16/f32, Qwen2.5 1.5B and its f32 twin), moving an oversized
+selection down automatically. A lost device drops the engine so the next attempt rebuilds it rather than streaming into a
+GPU that is gone.

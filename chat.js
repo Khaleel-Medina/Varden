@@ -671,6 +671,27 @@ let pendingTarget = null;
 
 /* ---------------- WebGPU + engine ---------------- */
 
+// A phone reports the same WebGPU features as a laptop but gets a much smaller
+// memory budget, and when it runs out the GPU process is torn down rather than
+// raising a clean allocation error. Treat phones as their own class so the picker
+// can steer to weights that actually fit.
+const MOBILE_VRAM_LIMIT = 1700;
+
+function isPhoneLike() {
+  const ua = navigator.userAgent || '';
+  if (/Android|iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS reports a desktop user agent; a coarse pointer on a narrow screen is the tell.
+  return (
+    navigator.maxTouchPoints > 1 &&
+    Boolean(window.matchMedia?.('(pointer: coarse)')?.matches) &&
+    window.innerWidth < 1100
+  );
+}
+
+function tooBigForDevice(model) {
+  return Boolean(state.webgpu?.mobile) && Boolean(model) && model.vram > MOBILE_VRAM_LIMIT;
+}
+
 async function detectWebGPU() {
   if (!('gpu' in navigator)) {
     state.webgpu = {
@@ -696,7 +717,9 @@ async function detectWebGPU() {
     parts.push(`shader-f16 ${hasF16 ? 'yes' : 'no'}`);
     const maxBuffer = adapter.limits?.maxBufferSize || 0;
     if (maxBuffer) parts.push(`${Math.round(maxBuffer / (1024 * 1024))} MB buffers`);
-    state.webgpu = { ok: true, hasF16, message: parts.join(' · ') };
+    const mobile = isPhoneLike();
+    if (mobile) parts.push('phone-class device');
+    state.webgpu = { ok: true, hasF16, maxBuffer, mobile, message: parts.join(' · ') };
   } catch (error) {
     state.webgpu = { ok: false, message: `WebGPU failed to initialise: ${error?.message || error}` };
   }
@@ -712,7 +735,24 @@ function renderGpuState() {
   if (!ok) els.notice.textContent = state.webgpu?.message || 'Local models cannot run in this browser.';
   els.loadModel.disabled = !ok;
   if (ok && state.webgpu.hasF16 === false) ensureCompatibleModel();
+  if (ok) ensureFittingModel();
   syncControls();
+}
+
+// A phone cannot hold an 8B model however much it advertises, so move an oversized
+// selection down to the largest one that fits instead of letting it fail mid-reply.
+function ensureFittingModel() {
+  const current = MODEL_CATALOG.find((model) => model.id === state.settings.modelId);
+  if (!current || !tooBigForDevice(current)) return;
+  const fits = MODEL_CATALOG.filter(
+    (model) => !tooBigForDevice(model) && !(modelNeedsF16(model) && state.webgpu?.hasF16 === false)
+  );
+  if (!fits.length) return;
+  const best = fits.reduce((smallest, model) => (model.vram < smallest.vram ? model : smallest), fits[0]);
+  if (best.id === state.settings.modelId) return;
+  state.settings.modelId = best.id;
+  saveSettings();
+  buildModelSelect();
 }
 
 // A GPU without shader-f16 cannot compile the f16 models at all, so quietly move
@@ -764,13 +804,17 @@ function buildModelSelect() {
       const flags = [model.uncensored ? 'uncensored' : null, model.recommended ? 'recommended' : null]
         .filter(Boolean)
         .join(', ');
-      const blocked = modelNeedsF16(model) && state.webgpu?.hasF16 === false;
+      const needsF16 = modelNeedsF16(model) && state.webgpu?.hasF16 === false;
+      const oversized = tooBigForDevice(model);
+      const blocked = needsF16 || oversized;
       option.textContent = `${model.label} — ${(model.vram / 1024).toFixed(1)} GB VRAM${flags ? ` (${flags})` : ''}${
-        blocked ? ' · needs f16' : ''
+        needsF16 ? ' · needs f16' : oversized ? ' · too large for this device' : ''
       }`;
       if (blocked) {
         option.disabled = true;
-        option.title = 'This GPU cannot compile f16 shaders. Pick a model marked f32.';
+        option.title = needsF16
+          ? 'This GPU cannot compile f16 shaders. Pick a model marked f32.'
+          : 'This device cannot hold that much GPU memory. Pick a smaller model.';
       }
       return option;
     })
@@ -785,9 +829,12 @@ function updateModelNote() {
     ? ' Uncensored fine-tune: it will not sanitise a scene for you.'
     : '';
   const blocked = modelNeedsF16(model) && state.webgpu?.hasF16 === false;
+  const oversized = tooBigForDevice(model);
   const extra = blocked
     ? ' This GPU cannot compile f16 shaders, so this model will not load here — pick one marked f32.'
-    : '';
+    : oversized
+      ? ' This device cannot hold that much GPU memory — loading it usually ends with the GPU dropping the model mid-reply. Pick something under 1.7 GB.'
+      : '';
   els.modelNote.textContent = `${model.note}${warning}${extra} About ${(model.vram / 1024).toFixed(1)} GB of GPU memory; the weights stay cached after the first download.`;
 }
 
@@ -829,6 +876,11 @@ async function ensureEngine() {
   if (!state.webgpu?.ok) throw new Error(state.webgpu?.message || 'WebGPU is not available in this browser.');
 
   const chosen = MODEL_CATALOG.find((model) => model.id === modelId);
+  if (tooBigForDevice(chosen)) {
+    throw new Error(
+      `"${chosen.label}" needs about ${(chosen.vram / 1024).toFixed(1)} GB of GPU memory and this device will drop it mid-reply. Pick Qwen2.5 0.5B or Llama 3.2 1B (f32) instead.`
+    );
+  }
   if (modelNeedsF16(chosen) && state.webgpu?.hasF16 === false) {
     throw new Error(
       'This GPU cannot compile f16 shaders, so that model would fail while loading. Pick a model marked f32 — Llama 3.2 1B (f32) is the same model in the form this GPU can run.'
@@ -897,6 +949,15 @@ async function unloadEngine() {
 
 function describeError(error) {
   const message = String(error?.message || error || 'Unknown error');
+  // The single most common phone failure: the GPU process is torn down mid-run
+  // (memory pressure or a driver reset), so every pending buffer read rejects.
+  // Nothing recovered, so the engine has to be rebuilt rather than retried.
+  if (/mapAsync|unmapped before mapping|Buffer was unmapped|GPUBuffer.*unmapped/i.test(message)) {
+    return 'The phone\u2019s GPU dropped the model while it was reading results back — that is memory pressure, not a model bug. Unload the model, then load the smallest one (Qwen2.5 0.5B or Llama 3.2 1B f32) and keep the scene short; on iOS close other tabs first, since Safari gives a page very little GPU memory. (' + message + ')';
+  }
+  if (/device.?lost|lost device|DEVICE_REMOVED|device removed/i.test(message)) {
+    return 'The WebGPU device was closed by the browser, usually from running out of GPU memory. Load the smallest model and try again; the previous engine cannot be reused.';
+  }
   if (/out of memory|oom|allocation|buffer size/i.test(message)) {
     return 'The GPU ran out of memory. Try a smaller model, or start a fresh chat to shorten the context.';
   }
@@ -1049,6 +1110,14 @@ async function generate({ mode = 'reply', index = null } = {}) {
   } catch (error) {
     target.error = describeError(error);
     console.error('Varden: generation failed', error);
+    // A lost device cannot be reused, so drop the engine: the next attempt rebuilds
+    // it instead of streaming into a GPU that is no longer there.
+    if (/mapAsync|unmapped|device.?lost|DEVICE_REMOVED/i.test(String(error?.message || error))) {
+      state.engine = null;
+      state.engineModel = null;
+      showLoad(false);
+      syncModelChip();
+    }
   } finally {
     if (pendingFrame) {
       cancelAnimationFrame(pendingFrame);
