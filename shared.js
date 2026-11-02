@@ -34,7 +34,9 @@ async function getClient() {
     clientPromise = import('https://esm.sh/@supabase/supabase-js@2')
       .then(({ createClient }) =>
         createClient(SUPABASE_URL, SUPABASE_ANON, {
-          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+          // detectSessionInUrl must stay on: an OAuth provider sends the session
+          // back in the URL, and with detection off the visit would look signed out.
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         })
       )
       .catch((error) => {
@@ -87,7 +89,73 @@ function explainAuth(error) {
   if (/at least 6 characters/i.test(message)) return 'Use a password of at least 6 characters.';
   if (/rate limit|too many/i.test(message)) return 'Too many attempts — wait a minute and try again.';
   if (/signups not allowed|Signups not allowed/i.test(message)) return 'Sign-ups are disabled for this project.';
+  if (/provider is not enabled|Unsupported provider/i.test(message)) {
+    return 'That sign-in provider is not enabled yet — turn it on in Supabase → Authentication → Providers.';
+  }
+  if (/redirect_uri_mismatch|Invalid redirect|redirect url/i.test(message)) {
+    return `The provider does not accept ${oauthRedirectUrl()} as a redirect. Add it in Supabase → Authentication → URL Configuration → Redirect URLs.`;
+  }
+  if (/access_denied|denied the request|cancelled/i.test(message)) return 'Sign-in was cancelled.';
+  if (/invalid_client|client secret|client_id/i.test(message)) {
+    return 'The provider rejected the app credentials — check the client ID and secret in Supabase → Authentication → Providers.';
+  }
   return explain(error);
+}
+
+/* ---------------- OAuth providers ---------------- */
+
+// Offered on the account dialog. Any provider you have not enabled in Supabase
+// Auth → Providers still renders; clicking it explains what is missing.
+export const OAUTH_PROVIDERS = [
+  { id: 'google', label: 'Google' },
+  { id: 'discord', label: 'Discord' },
+  { id: 'github', label: 'GitHub' },
+];
+
+// Where the provider returns the browser. This exact URL must be listed in
+// Supabase → Authentication → URL Configuration → Redirect URLs (both the
+// deployed origin and http://localhost:3000 while developing).
+export function oauthRedirectUrl() {
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
+// Hands the browser to the provider. On success the page navigates away, so there
+// is nothing to await afterwards; failures (provider not enabled, bad client) come
+// back synchronously and are thrown for the dialog to show.
+export async function signInWithProvider(provider) {
+  const supabase = await getClient();
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: oauthRedirectUrl(),
+      ...(provider === 'google' ? { queryParams: { prompt: 'select_account' } } : {}),
+    },
+  });
+  if (error) throw new Error(explainAuth(error));
+  return true;
+}
+
+// Providers report refusals on the query string (code flow) or the hash (implicit).
+// Both are passed in because the Supabase client rewrites the URL while it looks
+// for a session, which can erase the message before anyone reads it.
+export function oauthErrorFromUrl(search = '', hash = '') {
+  const query = new URLSearchParams(String(search || '').replace(/^\?/, ''));
+  const fragment = new URLSearchParams(String(hash || '').replace(/^#/, ''));
+  const code = query.get('error') || fragment.get('error');
+  if (!code) return null;
+  const description = (query.get('error_description') || fragment.get('error_description') || '').replace(/\+/g, ' ');
+  const text = `${code} ${description}`.toLowerCase();
+  if (text.includes('access_denied')) return 'Sign-in was cancelled.';
+  if (text.includes('provider is not enabled') || text.includes('unsupported provider')) {
+    return 'That sign-in provider is not enabled yet — turn it on in Supabase → Authentication → Providers.';
+  }
+  if (text.includes('redirect')) {
+    return `The provider does not accept ${oauthRedirectUrl()} as a redirect. Add it in Supabase → Authentication → URL Configuration → Redirect URLs.`;
+  }
+  if (text.includes('server_error') || text.includes('invalid_client')) {
+    return 'The provider could not verify the app — check its client ID and secret in Supabase, then try again.';
+  }
+  return description || code;
 }
 
 /* ---------------- accounts ---------------- */

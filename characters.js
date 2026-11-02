@@ -25,9 +25,12 @@ import {
   getSharedUser,
   listMyCards,
   listSharedCards,
+  OAUTH_PROVIDERS,
+  oauthErrorFromUrl,
   onAuthChange,
   shareCard,
   signIn,
+  signInWithProvider,
   signOut,
   signUp,
   updateSharedCard,
@@ -42,7 +45,16 @@ const state = {
   editingId: null,
   avatar: null,
   lore: [],
-  shared: { cards: [], error: null, user: null, loading: false, mine: [], mineError: null, mineLoading: false },
+  shared: {
+    cards: [],
+    error: null,
+    user: null,
+    loading: false,
+    mine: [],
+    mineError: null,
+    mineLoading: false,
+    returning: false,
+  },
   account: { mode: 'signin', busy: false },
   share: { character: null, busy: false },
   upload: { row: null, character: null, busy: false },
@@ -97,6 +109,8 @@ const els = {
   accountError: document.getElementById('accountError'),
   accountSignedOut: document.getElementById('accountSignedOut'),
   accountSignedIn: document.getElementById('accountSignedIn'),
+  accountOauth: document.getElementById('accountOauth'),
+  accountDivider: document.getElementById('accountDivider'),
   accountToggle: document.getElementById('accountToggle'),
   accountSubmit: document.getElementById('accountSubmit'),
   accountSignOut: document.getElementById('accountSignOut'),
@@ -809,6 +823,11 @@ async function pullSharedCard(id) {
   }
 }
 
+// Captured at load: the Supabase client rewrites the URL while it looks for a
+// session, so a provider's refusal would vanish before the dialog could show it.
+const initialSearch = window.location.search;
+const initialHash = window.location.hash;
+
 /* ---------------- accounts ---------------- */
 
 const ACCOUNT_NOTE =
@@ -827,6 +846,8 @@ function renderAccount() {
   if (els.accountSignedIn) els.accountSignedIn.hidden = !user;
   if (els.accountSignedOut) els.accountSignedOut.hidden = Boolean(user);
   if (els.accountFields) els.accountFields.hidden = Boolean(user);
+  if (els.accountOauth) els.accountOauth.hidden = Boolean(user);
+  if (els.accountDivider) els.accountDivider.hidden = Boolean(user);
   if (els.accountTitle) {
     els.accountTitle.textContent = user
       ? 'Signed in'
@@ -1118,9 +1139,70 @@ async function removeUpload(id) {
   }
 }
 
+// One button per provider, built once. The list lives in shared.js so trimming a
+// provider is a one-line change rather than markup plus wiring.
+function renderProviders() {
+  if (!els.accountOauth || els.accountOauth.childElementCount) return;
+  els.accountOauth.append(
+    ...OAUTH_PROVIDERS.map((provider) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'oauth-button';
+      button.dataset.provider = provider.id;
+      button.title = `Sign in with ${provider.label}`;
+
+      const badge = document.createElement('span');
+      badge.className = 'oauth-badge';
+      badge.setAttribute('aria-hidden', 'true');
+      badge.textContent = provider.label.slice(0, 1);
+
+      const label = document.createElement('span');
+      label.textContent = `Continue with ${provider.label}`;
+
+      button.append(badge, label);
+      return button;
+    })
+  );
+}
+
+async function startProviderSignIn(button) {
+  const provider = button?.dataset.provider;
+  if (!provider || state.account.busy) return;
+  state.account.busy = true;
+  button.disabled = true;
+  showAccountError('');
+  try {
+    await signInWithProvider(provider);
+    // Success navigates to the provider; the promise resolves just before the
+    // page leaves, so nothing is re-enabled here.
+  } catch (error) {
+    showAccountError(error?.message || String(error));
+    state.account.busy = false;
+    button.disabled = false;
+  }
+}
+
 function initShared() {
   els.refreshShared?.addEventListener('click', () => loadShared());
   els.refreshMine?.addEventListener('click', () => loadMine());
+
+  // Coming back from a provider: either tokens to consume or a refusal to report.
+  const oauthError = oauthErrorFromUrl(initialSearch, initialHash);
+  const hasTokens = /access_token=/.test(initialHash) || /[?&]code=/.test(initialSearch);
+  if (oauthError) {
+    showAccountError(oauthError);
+    els.accountDialog?.showModal();
+    history.replaceState(null, '', window.location.pathname);
+  } else if (hasTokens) {
+    state.shared.returning = true;
+    toast('Finishing sign-in…');
+  }
+
+  renderProviders();
+  els.accountOauth?.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-provider]');
+    if (button) startProviderSignIn(button);
+  });
 
   els.accountBtn?.addEventListener('click', () => openAccountDialog());
   els.accountClose?.addEventListener('click', () => els.accountDialog.close());
@@ -1174,6 +1256,10 @@ function initShared() {
     const changed = (state.shared.user?.id || null) !== (user?.id || null);
     state.shared.user = user;
     renderAccount();
+    if (changed && user && state.shared.returning) {
+      state.shared.returning = false;
+      toast(`Signed in as ${user.email}.`);
+    }
     if (changed) loadMine();
   });
 

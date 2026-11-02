@@ -129,3 +129,37 @@ The chat page probes the adapter, disables models it cannot run, and falls back 
 feature at the cost of roughly 250 MB–1 GB more memory. The catalog's f32 entries are Llama 3.2 1B/3B, Hermes 3 (3B),
 Hermes 2 Pro (8B), Qwen2.5 1.5B/7B and Phi 3.5 mini. If a failure mentions stale shaders on an f32 model, clear the
 site's cached model files in DevTools → Application → Storage and reload.
+
+## Sign in with Google, Discord or GitHub
+
+The account dialog offers OAuth next to email and password. Nothing about a provider is stored in this repo — the client
+ID and secret live in Supabase, and the browser only ever sees the public anon key.
+
+**1. Register an app with each provider.** The redirect URL is always your project's Supabase callback:
+
+```
+https://ljruzruhbqkbxkflrvzi.supabase.co/auth/v1/callback
+```
+
+- **Google** — Cloud console → APIs & Services → Credentials → Create OAuth client ID → Web application. Authorised
+  redirect URI: the callback above. Fill in the consent screen first or the button returns `access_denied`.
+- **Discord** — discord.com/developers/applications → New Application → OAuth2 → Redirects → add the callback.
+- **GitHub** — Settings → Developer settings → OAuth Apps → New OAuth App. Authorization callback URL: the callback.
+
+**2. Paste the credentials into Supabase** — Authentication → Providers → choose the provider → enable, paste the client
+ID and secret, save.
+
+**3. Allow the return trip** — Authentication → URL Configuration:
+
+- Site URL: the production address, e.g. `https://varden.vercel.app`
+- Redirect URLs: the deployed origin and, for local work, `http://localhost:3000`. A wildcard such as
+  `https://*.vercel.app/**` covers preview deployments.
+
+Every address the browser can land on after a redirect must be listed here, otherwise the provider refuses with
+`redirect_uri_mismatch` — the dialog names that error and points at this setting instead of failing silently.
+
+**4. Providers you do not want** — comment the entry out of `OAUTH_PROVIDERS` in `shared.js`. Leaving a provider listed
+while it is disabled in Supabase is harmless: the button appears and the click explains what is missing.
+
+`Confirm email` only affects the email path; OAuth users are verified by their provider and skip it. A first-time OAuth
+user needs no extra setup — the first card they publish creates their `shared_cards` row, owned by their new account.
