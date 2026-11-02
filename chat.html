@@ -149,6 +149,20 @@
             <button class="solid-button" id="keylessUseBtn" type="button">Use free endpoint</button>
             <button class="ghost-button" id="keylessRefreshBtn" type="button">Refresh list</button>
           </div>
+          <div class="keyless-confirm" id="keylessConfirm" hidden>
+            <p class="keyless-confirm-title">Send the scene off this device?</p>
+            <p class="keyless-confirm-body">
+              The pool runs on someone else's servers, so from the next reply on, everything in this chat goes there:
+              your words, the character's card, the persona you play and the author's note. There is no key, no account
+              and no agreement between you and whoever operates it, and the whole exchange is often logged. Anything you
+              would not say to a stranger probably belongs on a local model instead. Asked once per browser; switching
+              back is instant.
+            </p>
+            <div class="panel-actions">
+              <button class="solid-button" id="keylessConfirmYes" type="button">Yes, use the free pool</button>
+              <button class="ghost-button" id="keylessConfirmCancel" type="button">Keep it on this device</button>
+            </div>
+          </div>
           <p class="field-note keyless-status" id="keylessStatus" role="status"></p>
         </section>
 

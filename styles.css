@@ -3011,3 +3011,38 @@ body.dragging {
 .keyless-status {
   color: #e0a953;
 }
+
+/* The first switch asks once, here rather than in a browser alert: this panel can say
+   what is actually sent, and the answer is remembered with the other settings. */
+.keyless-confirm {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(224, 169, 83, 0.42);
+  background: rgba(224, 169, 83, 0.08);
+}
+
+.keyless-confirm[hidden] {
+  display: none;
+}
+
+.keyless-confirm-title {
+  margin: 0 0 6px;
+  color: #e0a953;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.keyless-confirm-body {
+  margin: 0 0 10px;
+  color: var(--muted, #9aa0a6);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.keyless-confirm .panel-actions {
+  flex-wrap: wrap;
+  margin-top: 0;
+}

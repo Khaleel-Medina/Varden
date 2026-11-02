@@ -231,6 +231,10 @@ because its promise is different: it works with no key and no account, but it is
   (e.g. `gpt-4o-mini`) answer `402 Payment Required` — those are not free.
 - The UI says plainly that the scene leaves the browser, that there is no billing and no privacy, and that the pool can
   be busy or change without notice. Local GPU remains the default and the only private route.
+- The first switch to the pool asks for confirmation in the panel itself (not a browser alert): it names what travels —
+  the reply text, the character card, the persona and the author's note — and the answer is stored with the settings, so
+  it is asked once per browser. Cancelling leaves the previous route untouched. A remembered keyless route is dropped on
+  load unless that confirmation exists, so a stored setting can never start sending scenes unasked.
 - Errors: 402 is reported as "that alias wants payment", 429 as "the pool is busy", anything else surfaces its status.
 
 Nothing here is billed to the owner and nothing needs maintaining: no key, no server, no account.

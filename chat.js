@@ -178,6 +178,7 @@ const DEFAULT_SETTINGS = {
   characterId: null,
   hostedModel: null,
   keylessModel: null,
+  keylessConfirmed: false,
 };
 
 const state = {
@@ -266,6 +267,9 @@ const els = {
   keylessUse: $('keylessUseBtn'),
   keylessRefresh: $('keylessRefreshBtn'),
   keylessStatus: $('keylessStatus'),
+  keylessConfirm: $('keylessConfirm'),
+  keylessConfirmYes: $('keylessConfirmYes'),
+  keylessConfirmCancel: $('keylessConfirmCancel'),
 };
 
 /* ---------------- settings ---------------- */
@@ -286,6 +290,9 @@ function loadSettings() {
   if (typeof state.settings.keylessModel !== 'string' || !state.settings.keylessModel.trim()) {
     state.settings.keylessModel = null;
   }
+  // A remembered route only survives if it was confirmed once. Without this, a new
+  // session could start shipping scenes off the device that was never asked.
+  if (state.settings.keylessConfirmed !== true) state.settings.keylessModel = null;
 }
 
 function saveSettings() {
@@ -523,6 +530,28 @@ function renderKeylessStatus() {
   if (!bits.length) bits.push('No account needed. The pool can be busy, and it changes without notice.');
   els.keylessStatus.textContent = bits.join(' ');
   syncControls();
+}
+
+// Nothing leaves the device until the user has said so once in this browser. The
+// answer lives with the other settings, so it is asked per browser, not per chat.
+function setKeylessConfirm(open) {
+  if (!els.keylessConfirm) return;
+  els.keylessConfirm.hidden = !open;
+  if (open) els.keylessConfirmYes?.focus();
+}
+
+function activateKeyless(id) {
+  state.settings.keylessModel = id;
+  // Exactly one route at a time, so a hosted key is never quietly used instead.
+  state.settings.hostedModel = null;
+  state.keyless.status = '';
+  state.hosted.status = '';
+  saveSettings();
+  syncModelChip();
+  renderHostedStatus();
+  renderKeylessStatus();
+  els.notice.hidden = true;
+  setKeylessConfirm(false);
 }
 
 async function loadKeylessModels() {
@@ -1865,6 +1894,7 @@ function bindEvents() {
     state.settings.keylessModel = null;
     state.hosted.status = '';
     state.keyless.status = '';
+    setKeylessConfirm(false);
     saveSettings();
     updateModelNote();
     syncModelChip();
@@ -1903,6 +1933,7 @@ function bindEvents() {
     state.settings.keylessModel = null;
     state.hosted.status = '';
     state.keyless.status = '';
+    setKeylessConfirm(false);
     saveSettings();
     syncModelChip();
     renderHostedStatus();
@@ -1921,7 +1952,10 @@ function bindEvents() {
     loadHostedModels();
   });
 
-  els.keylessSelect?.addEventListener('change', renderKeylessNote);
+  els.keylessSelect?.addEventListener('change', () => {
+    renderKeylessNote();
+    setKeylessConfirm(false);
+  });
   els.keylessUse?.addEventListener('click', () => {
     const id = els.keylessSelect.value;
     if (!id) {
@@ -1929,16 +1963,24 @@ function bindEvents() {
       renderKeylessStatus();
       return;
     }
-    state.settings.keylessModel = id;
-    // Exactly one route at a time, so a hosted key is never quietly used instead.
-    state.settings.hostedModel = null;
-    state.keyless.status = '';
-    state.hosted.status = '';
-    saveSettings();
-    syncModelChip();
-    renderHostedStatus();
+    // The first switch is a question, not a setting: nothing is activated until the
+    // answer comes back, so cancelling leaves the previous route exactly as it was.
+    if (state.settings.keylessConfirmed !== true) {
+      state.keyless.status = 'The free pool is off this device. Confirm below to switch — it is asked once.';
+      renderKeylessStatus();
+      setKeylessConfirm(true);
+      return;
+    }
+    activateKeyless(id);
+  });
+  els.keylessConfirmYes?.addEventListener('click', () => {
+    state.settings.keylessConfirmed = true;
+    activateKeyless(els.keylessSelect.value || KEYLESS_FALLBACK[0]);
+  });
+  els.keylessConfirmCancel?.addEventListener('click', () => {
+    setKeylessConfirm(false);
+    state.keyless.status = 'Stayed on this device. Nothing was switched and no scene was sent.';
     renderKeylessStatus();
-    els.notice.hidden = true;
   });
   els.keylessRefresh?.addEventListener('click', () => {
     state.keyless.status = '';
