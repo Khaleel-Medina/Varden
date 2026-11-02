@@ -127,6 +127,39 @@ const MODEL_CATALOG = [
 const modelNeedsF16 = (model) => Boolean(model) && !model.f32 && /q4f16_1|q0f16/.test(model.id);
 const f32Fallback = () => MODEL_CATALOG.find((model) => model.f32) || null;
 
+/* ---------------- hosted models (bring your own key) ---------------- */
+
+// Hosted models are deliberately a separate list: they run on someone else's GPUs
+// and the scene leaves this browser. Varden hosts, pays for and maintains nothing
+// here — the visitor pastes their own OpenRouter key, it stays on this device, and
+// the request goes from the page straight to OpenRouter. The model catalog is
+// fetched from their public endpoint, so it never goes stale and needs no upkeep.
+const HOSTED_BASE = 'https://openrouter.ai/api/v1';
+const HOSTED_KEY_STORE = 'varden-hosted-key';
+const HOSTED_DEFAULT = 'deepseek/deepseek-chat';
+
+const VENDOR_LABELS = {
+  openai: 'OpenAI',
+  anthropic: 'Anthropic',
+  google: 'Google',
+  meta: 'Meta',
+  'meta-llama': 'Meta',
+  deepseek: 'DeepSeek',
+  mistralai: 'Mistral',
+  qwen: 'Alibaba (Qwen)',
+  'x-ai': 'xAI',
+  moonshotai: 'Moonshot',
+  nvidia: 'NVIDIA',
+  'z-ai': 'Z.AI',
+  minimax: 'MiniMax',
+  cohere: 'Cohere',
+  amazon: 'Amazon',
+  microsoft: 'Microsoft',
+};
+
+const vendorLabel = (slug) =>
+  VENDOR_LABELS[slug] || slug.replace(/[-_]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const DEFAULT_SETTINGS = {
   modelId: DEFAULT_MODEL,
   temperature: 0.85,
@@ -134,6 +167,7 @@ const DEFAULT_SETTINGS = {
   maxTokens: 384,
   personaId: null,
   characterId: null,
+  hostedModel: null,
 };
 
 const state = {
@@ -154,6 +188,8 @@ const state = {
   pinned: true,
   editingIndex: null,
   memories: [],
+  hosted: { key: '', models: [], loading: false, error: null, status: '' },
+  hostedAbort: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -206,6 +242,14 @@ const els = {
   personaSaveNew: $('personaSaveNew'),
   personaCancel: $('personaCancel'),
   personaClose: $('personaClose'),
+  hostedSelect: $('hostedSelect'),
+  hostedNote: $('hostedNote'),
+  hostedKey: $('hostedKey'),
+  hostedRemember: $('hostedRemember'),
+  hostedUse: $('hostedUseBtn'),
+  hostedForget: $('hostedForgetBtn'),
+  hostedRefresh: $('hostedRefreshBtn'),
+  hostedStatus: $('hostedStatus'),
 };
 
 /* ---------------- settings ---------------- */
@@ -220,6 +264,9 @@ function loadSettings() {
   if (!MODEL_CATALOG.some((model) => model.id === state.settings.modelId)) {
     state.settings.modelId = DEFAULT_MODEL;
   }
+  if (typeof state.settings.hostedModel !== 'string' || !state.settings.hostedModel.includes('/')) {
+    state.settings.hostedModel = null;
+  }
 }
 
 function saveSettings() {
@@ -227,6 +274,207 @@ function saveSettings() {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   } catch (error) {
     console.warn('Varden: could not save settings', error);
+  }
+}
+
+/* ---------------- hosted model plumbing ---------------- */
+
+const hostedActive = () => Boolean(state.settings.hostedModel);
+const hostedEntry = (id) => state.hosted.models.find((model) => model.id === id) || null;
+
+function hostedModelLabel() {
+  const entry = hostedEntry(state.settings.hostedModel);
+  return entry ? entry.name : state.settings.hostedModel || 'Hosted model';
+}
+
+function readHostedKey() {
+  return state.hosted.key || '';
+}
+
+function setHostedKey(value, remember) {
+  state.hosted.key = String(value || '').trim();
+  try {
+    if (remember && state.hosted.key) localStorage.setItem(HOSTED_KEY_STORE, state.hosted.key);
+    else localStorage.removeItem(HOSTED_KEY_STORE);
+  } catch (error) {
+    console.warn('Varden: could not store the hosted key', error);
+  }
+}
+
+function loadHostedKey() {
+  try {
+    state.hosted.key = localStorage.getItem(HOSTED_KEY_STORE) || '';
+  } catch {
+    state.hosted.key = '';
+  }
+  if (els.hostedKey) els.hostedKey.value = state.hosted.key;
+  if (els.hostedRemember) els.hostedRemember.checked = Boolean(state.hosted.key);
+}
+
+function buildHostedSelect() {
+  if (!els.hostedSelect) return;
+  if (!state.hosted.models.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = state.hosted.loading ? 'Loading the hosted catalog…' : 'No hosted models loaded';
+    els.hostedSelect.replaceChildren(option);
+    renderHostedNote();
+    return;
+  }
+  const groups = new Map();
+  for (const model of state.hosted.models) {
+    if (!groups.has(model.vendor)) groups.set(model.vendor, []);
+    groups.get(model.vendor).push(model);
+  }
+  const fragment = document.createDocumentFragment();
+  for (const [vendor, models] of [...groups.entries()].sort((a, b) => vendorLabel(a[0]).localeCompare(vendorLabel(b[0])))) {
+    const group = document.createElement('optgroup');
+    group.label = `${vendorLabel(vendor)} (${models.length})`;
+    for (const model of models) {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.name;
+      group.append(option);
+    }
+    fragment.append(group);
+  }
+  els.hostedSelect.replaceChildren(fragment);
+  const wanted = state.settings.hostedModel || HOSTED_DEFAULT;
+  els.hostedSelect.value = hostedEntry(wanted) ? wanted : state.hosted.models[0].id;
+  renderHostedNote();
+}
+
+function renderHostedNote() {
+  if (!els.hostedNote) return;
+  const entry = hostedEntry(els.hostedSelect.value) || hostedEntry(state.settings.hostedModel);
+  if (!entry) {
+    els.hostedNote.textContent = 'Model list unavailable — check your connection and press Refresh list.';
+    return;
+  }
+  const price = (value) => (value > 0 ? `$${(value * 1e6).toFixed(2)}` : 'free');
+  const context = entry.context ? `${Math.round(entry.context / 1000)}k context` : 'context unknown';
+  els.hostedNote.textContent = `${vendorLabel(entry.vendor)} · ${context} · ${price(entry.prompt)} per M in, ${price(
+    entry.completion
+  )} per M out. Billed by OpenRouter to your key.`;
+}
+
+function renderHostedStatus() {
+  if (!els.hostedStatus) return;
+  const bits = [];
+  if (hostedActive()) {
+    bits.push(
+      `Active: ${hostedModelLabel()}. Replies are sent to that provider and billed to your key — choose a model in the list above to go back to the GPU.`
+    );
+  }
+  if (!readHostedKey()) {
+    bits.push('No key yet: create one at openrouter.ai/keys, then paste it above. It stays in this browser.');
+  } else {
+    bits.push('Key is in this browser only.');
+  }
+  if (state.hosted.loading) bits.push('Loading the hosted catalog…');
+  if (state.hosted.error) bits.push(state.hosted.error);
+  if (state.hosted.status) bits.push(state.hosted.status);
+  els.hostedStatus.textContent = bits.join(' ');
+  syncControls();
+}
+
+async function loadHostedModels() {
+  if (state.hosted.loading) return;
+  state.hosted.loading = true;
+  renderHostedStatus();
+  buildHostedSelect();
+  try {
+    const response = await fetch(`${HOSTED_BASE}/models`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(`catalog request returned ${response.status}`);
+    const payload = await response.json();
+    const models = (payload.data || [])
+      .filter((model) => model && typeof model.id === 'string' && model.id.includes('/'))
+      .filter((model) =>
+        Array.isArray(model.architecture?.input_modalities)
+          ? model.architecture.input_modalities.includes('text')
+          : true
+      )
+      .map((model) => ({
+        id: model.id,
+        vendor: model.id.split('/')[0],
+        name: String(model.name || model.id).replace(/^[^:]*:\s*/, ''),
+        context: Number(model.context_length || 0),
+        prompt: Number(model.pricing?.prompt || 0),
+        completion: Number(model.pricing?.completion || 0),
+      }))
+      .sort((a, b) => a.vendor.localeCompare(b.vendor) || a.name.localeCompare(b.name));
+    if (!models.length) throw new Error('the catalog came back empty');
+    state.hosted.models = models;
+    state.hosted.error = null;
+  } catch (error) {
+    state.hosted.error = `Could not load the hosted model list (${error?.message || error}).`;
+  } finally {
+    state.hosted.loading = false;
+    buildHostedSelect();
+    renderHostedStatus();
+  }
+}
+
+// Streams straight from the page to OpenRouter with the visitor's own key.
+async function* hostedStream(prompt) {
+  const key = readHostedKey();
+  if (!key) throw new Error('No hosted API key was found in this browser.');
+  const controller = new AbortController();
+  state.hostedAbort = controller;
+  const response = await fetch(`${HOSTED_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+      Authorization: `Bearer ${key}`,
+      'X-Title': 'Varden',
+    },
+    body: JSON.stringify({
+      model: state.settings.hostedModel,
+      messages: prompt.messages,
+      stream: true,
+      temperature: Number(state.settings.temperature),
+      top_p: Number(state.settings.topP),
+      max_tokens: Number(state.settings.maxTokens),
+    }),
+    signal: controller.signal,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Hosted request failed (${response.status}) ${detail.slice(0, 300)}`.trim());
+  }
+  if (!response.body) throw new Error('The hosted provider returned no stream.');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+      for (const event of events) {
+        const line = event.split('\n').find((part) => part.startsWith('data:'));
+        if (!line) continue;
+        const payload = line.slice(5).trim();
+        if (!payload || payload === '[DONE]') continue;
+        let chunk;
+        try {
+          chunk = JSON.parse(payload);
+        } catch {
+          continue;
+        }
+        if (chunk.error) throw new Error(chunk.error.message || 'The hosted provider returned an error.');
+        yield chunk;
+      }
+      if (state.stopRequested) {
+        controller.abort();
+        break;
+      }
+    }
+  } finally {
+    if (state.hostedAbort === controller) state.hostedAbort = null;
   }
 }
 
@@ -839,6 +1087,11 @@ function updateModelNote() {
 }
 
 function syncModelChip() {
+  if (hostedActive()) {
+    els.modelChip.textContent = `${hostedModelLabel()} · hosted`;
+    els.modelChip.dataset.state = 'ready';
+    return;
+  }
   if (state.engine && state.engineModel) {
     const model = MODEL_CATALOG.find((item) => item.id === state.engineModel);
     els.modelChip.textContent = `${model ? model.label : state.engineModel} · loaded`;
@@ -958,10 +1211,32 @@ function describeError(error) {
   if (/device.?lost|lost device|DEVICE_REMOVED|device removed/i.test(message)) {
     return 'The WebGPU device was closed by the browser, usually from running out of GPU memory. Load the smallest model and try again; the previous engine cannot be reused.';
   }
+  if (/^No hosted API key/i.test(message)) {
+    return 'No hosted key in this browser yet. Create one at openrouter.ai/keys and paste it into the Hosted models panel — it stays on this device.';
+  }
+  if (/Hosted request failed \(401\)|invalid.?api.?key|No auth credentials|User not found/i.test(message)) {
+    return 'The hosted provider rejected that key. Check it is an OpenRouter key (starts with sk-or-) and has not been revoked, then paste it again.';
+  }
+  if (/\(402\)|insufficient credits|requires more credits|not enough credits/i.test(message)) {
+    return 'Your OpenRouter balance cannot cover that model. Add credit, or pick a cheaper model from the hosted list.';
+  }
+  if (/\(429\)|rate.?limit/i.test(message)) {
+    return 'The provider is rate limiting your key. Wait a moment and send again, or choose a different hosted model.';
+  }
+  if (/\(404\)|No endpoints found|model not found/i.test(message)) {
+    return 'That hosted model is unavailable right now. Pick another from the hosted list and press Refresh list.';
+  }
+  if (/\(403\)/i.test(message)) return 'The provider refused that model for this key. Pick a different hosted model.';
+  if (/Hosted request failed \(\d+\)/i.test(message)) {
+    return `The hosted request failed before any text arrived. ${message.slice(0, 240)}`;
+  }
   if (/out of memory|oom|allocation|buffer size/i.test(message)) {
     return 'The GPU ran out of memory. Try a smaller model, or start a fresh chat to shorten the context.';
   }
   if (/device.?lost|lost device/i.test(message)) return 'The GPU device was lost. Unload the model and load it again.';
+  if (/Failed to fetch|network|net::/i.test(message) && hostedActive()) {
+    return 'The request to the hosted provider did not go through. Check your connection and that the key is still valid, then try again.';
+  }
   if (/Failed to fetch|network|net::/i.test(message)) return 'The model download failed. Check your connection and try again — cached parts are reused.';
   if (/not part of this WebLLM build/i.test(message)) return message;
   if (/Invalid ShaderModule|index_kernel|validating compute stage|createShaderModule|ShaderModule/i.test(message)) {
@@ -977,8 +1252,9 @@ function describeError(error) {
 
 function syncControls() {
   const busy = state.generating;
-  els.send.disabled = busy || !state.webgpu?.ok;
-  els.continue.disabled = busy || !state.webgpu?.ok || !state.chat?.messages.some((message) => message.role === 'assistant');
+  const ready = Boolean(state.webgpu?.ok) || hostedActive();
+  els.send.disabled = busy || !ready;
+  els.continue.disabled = busy || !ready || !state.chat?.messages.some((message) => message.role === 'assistant');
   els.stop.hidden = !busy;
   els.input.disabled = busy;
   els.exportChat.disabled = !state.chat?.messages.length;
@@ -1004,9 +1280,11 @@ async function sendMessage(rawText) {
   if (state.generating || !state.chat) return;
   const text = String(rawText || '').trim();
   if (!text) return;
-  if (!state.webgpu?.ok) {
+  if (!state.webgpu?.ok && !hostedActive()) {
     els.notice.hidden = false;
-    els.notice.textContent = state.webgpu?.message || 'WebGPU is unavailable, so local models cannot run here.';
+    els.notice.textContent =
+      state.webgpu?.message ||
+      'WebGPU is unavailable here, so local models cannot run. Pick a hosted model in the panel, or use a browser with WebGPU.';
     return;
   }
   els.input.value = '';
@@ -1080,21 +1358,17 @@ async function generate({ mode = 'reply', index = null } = {}) {
   let firstTokenAt = 0;
 
   try {
-    const engine = await ensureEngine();
-    const stream = await engine.chat.completions.create({
-      messages: prompt.messages,
-      stream: true,
-      temperature: Number(state.settings.temperature),
-      top_p: Number(state.settings.topP),
-      max_tokens: Number(state.settings.maxTokens),
-      stream_options: { include_usage: true },
-    });
+    // Both paths hand back the same async iterable of OpenAI-shaped chunks, so the
+    // streaming loop below does not care which one produced it.
+    const stream = hostedActive() ? hostedStream(prompt) : await createLocalStream(prompt);
 
     els.genStatus.hidden = false;
     els.genStatus.classList.add('busy');
-    els.genText.textContent = prompt.dropped
-      ? `Generating on your GPU · ${prompt.dropped} older message${prompt.dropped === 1 ? '' : 's'} trimmed for context`
-      : 'Generating on your GPU…';
+    els.genText.textContent = hostedActive()
+      ? `Generating with ${hostedModelLabel()} · billed to your key`
+      : prompt.dropped
+        ? `Generating on your GPU · ${prompt.dropped} older message${prompt.dropped === 1 ? '' : 's'} trimmed for context`
+        : 'Generating on your GPU…';
 
     for await (const chunk of stream) {
       if (state.stopRequested) break;
@@ -1108,15 +1382,19 @@ async function generate({ mode = 'reply', index = null } = {}) {
       if (chunk?.usage) usage = chunk.usage;
     }
   } catch (error) {
-    target.error = describeError(error);
-    console.error('Varden: generation failed', error);
-    // A lost device cannot be reused, so drop the engine: the next attempt rebuilds
-    // it instead of streaming into a GPU that is no longer there.
-    if (/mapAsync|unmapped|device.?lost|DEVICE_REMOVED/i.test(String(error?.message || error))) {
-      state.engine = null;
-      state.engineModel = null;
-      showLoad(false);
-      syncModelChip();
+    // Stopping a hosted reply aborts the request, which arrives here as an AbortError.
+    const aborted = state.stopRequested || /abort/i.test(String(error?.name || ''));
+    if (!aborted) {
+      target.error = describeError(error);
+      console.error('Varden: generation failed', error);
+      // A lost device cannot be reused, so drop the engine: the next attempt rebuilds
+      // it instead of streaming into a GPU that is no longer there.
+      if (/mapAsync|unmapped|device.?lost|DEVICE_REMOVED/i.test(String(error?.message || error))) {
+        state.engine = null;
+        state.engineModel = null;
+        showLoad(false);
+        syncModelChip();
+      }
     }
   } finally {
     if (pendingFrame) {
@@ -1142,6 +1420,20 @@ async function generate({ mode = 'reply', index = null } = {}) {
   }
 }
 
+// The local engine is created lazily, so it is awaited here and then handed back as
+// the same kind of streaming result the hosted path yields.
+async function createLocalStream(prompt) {
+  const engine = await ensureEngine();
+  return engine.chat.completions.create({
+    messages: prompt.messages,
+    stream: true,
+    temperature: Number(state.settings.temperature),
+    top_p: Number(state.settings.topP),
+    max_tokens: Number(state.settings.maxTokens),
+    stream_options: { include_usage: true },
+  });
+}
+
 // Streaming updates the body of the message currently being written.
 function scheduleStream(index, text) {
   const body = els.thread.querySelector(`.msg[data-index="${index}"] .msg-body`);
@@ -1164,6 +1456,11 @@ function stopGeneration() {
   if (!state.generating) return;
   state.stopRequested = true;
   els.genText.textContent = 'Stopping…';
+  try {
+    state.hostedAbort?.abort();
+  } catch {
+    /* request already closed */
+  }
   try {
     state.engine?.interruptGenerate?.();
   } catch (error) {
@@ -1406,8 +1703,59 @@ function bindEvents() {
 
   els.modelSelect.addEventListener('change', () => {
     state.settings.modelId = els.modelSelect.value;
+    // Choosing from the GPU list is also how you switch back from a hosted model.
+    state.settings.hostedModel = null;
+    state.hosted.status = '';
     saveSettings();
     updateModelNote();
+    syncModelChip();
+    syncControls();
+    renderHostedStatus();
+  });
+
+  els.hostedSelect?.addEventListener('change', renderHostedNote);
+  els.hostedKey?.addEventListener('input', () => {
+    setHostedKey(els.hostedKey.value, els.hostedRemember.checked);
+    state.hosted.status = '';
+    renderHostedStatus();
+  });
+  els.hostedRemember?.addEventListener('change', () => {
+    setHostedKey(els.hostedKey.value, els.hostedRemember.checked);
+    state.hosted.status = els.hostedRemember.checked
+      ? 'Key will be remembered on this device.'
+      : 'Key is kept only until this tab closes.';
+    renderHostedStatus();
+  });
+  els.hostedUse?.addEventListener('click', () => {
+    const id = els.hostedSelect.value;
+    if (!id) {
+      state.hosted.status = 'Pick a hosted model first.';
+      renderHostedStatus();
+      return;
+    }
+    if (!readHostedKey()) {
+      state.hosted.status = 'Add your OpenRouter key above first — browsing the list needs no key, chatting does.';
+      renderHostedStatus();
+      els.hostedKey.focus();
+      return;
+    }
+    state.settings.hostedModel = id;
+    state.hosted.status = '';
+    saveSettings();
+    syncModelChip();
+    renderHostedStatus();
+    els.notice.hidden = true;
+  });
+  els.hostedForget?.addEventListener('click', () => {
+    setHostedKey('', false);
+    if (els.hostedKey) els.hostedKey.value = '';
+    if (els.hostedRemember) els.hostedRemember.checked = false;
+    state.hosted.status = 'Key removed from this browser.';
+    renderHostedStatus();
+  });
+  els.hostedRefresh?.addEventListener('click', () => {
+    state.hosted.status = '';
+    loadHostedModels();
   });
 
   els.personaSelect.addEventListener('change', () => {
@@ -1484,6 +1832,8 @@ function bindEvents() {
 async function init() {
   loadSettings();
   buildModelSelect();
+  loadHostedKey();
+  buildHostedSelect();
   bindEvents();
   syncSettingsUi();
 
@@ -1499,6 +1849,11 @@ async function init() {
 
   await detectWebGPU();
   renderGpuState();
+  renderHostedStatus();
+  // The hosted catalog is a public, keyless request, so it loads even without WebGPU.
+  setTimeout(() => {
+    loadHostedModels();
+  }, 600);
 
   const params = new URLSearchParams(window.location.search);
   const requested = params.get('character');

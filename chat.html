@@ -105,6 +105,34 @@
           <p class="load-text" id="loadText"></p>
         </section>
 
+        <section class="panel-block hosted-block">
+          <p class="eyebrow">Hosted models <span class="hosted-badge">your API key</span></p>
+          <p class="field-note">
+            A separate list from the GPU models above. These run on other companies' servers, so the scene leaves this
+            browser. Varden hosts nothing here: you paste your own OpenRouter key, it stays on this device, and the
+            request goes straight to them.
+          </p>
+          <label class="field">
+            Hosted model
+            <select id="hostedSelect"></select>
+          </label>
+          <p class="field-note" id="hostedNote"></p>
+          <label class="field">
+            OpenRouter API key
+            <input id="hostedKey" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-v1-…" />
+          </label>
+          <label class="check-field">
+            <input id="hostedRemember" type="checkbox" />
+            Remember on this device
+          </label>
+          <div class="panel-actions">
+            <button class="solid-button" id="hostedUseBtn" type="button">Use hosted model</button>
+            <button class="ghost-button" id="hostedForgetBtn" type="button">Forget key</button>
+            <button class="ghost-button" id="hostedRefreshBtn" type="button">Refresh list</button>
+          </div>
+          <p class="field-note hosted-status" id="hostedStatus" role="status"></p>
+        </section>
+
         <section class="panel-block">
           <p class="eyebrow">You in this scene</p>
           <label class="field">
@@ -148,7 +176,8 @@
         </section>
 
         <p class="panel-foot">
-          Models, cards and chats live in this browser. Nothing is uploaded, and there is no message cap.
+          Local models, cards and chats live in this browser: nothing is uploaded and there is no message cap. Hosted
+          models are the exception — the scene is sent to the provider you pick, using your own key.
         </p>
       </aside>
     </div>

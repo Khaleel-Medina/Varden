@@ -198,3 +198,22 @@ GPU process is torn down instead of raising an allocation error — which surfac
 at about 1.7 GB of weights (Qwen2.5 0.5B, Llama 3.2 1B f16/f32, Qwen2.5 1.5B and its f32 twin), moving an oversized
 selection down automatically. A lost device drops the engine so the next attempt rebuilds it rather than streaming into a
 GPU that is gone.
+
+## Hosted models (separate list, no server of yours)
+
+Under **Hosted models** in the chat panel there is a second model list, kept deliberately separate from the WebGPU
+catalog. Those models run on other companies' servers through OpenRouter.
+
+- The visitor creates a key at https://openrouter.ai/keys and pastes it into the panel. It is stored in this browser
+  only when "Remember on this device" is ticked, and is sent to OpenRouter and nowhere else.
+- There is nothing for the owner to run: no proxy, no serverless function, no secret in the repo, no billing. Varden
+  never sees the key.
+- The list comes from `GET https://openrouter.ai/api/v1/models` — public and CORS-open (`access-control-allow-origin: *`)
+  — so it stays current with no maintenance here. Models are grouped by vendor (OpenAI, Anthropic, Google, Meta,
+  DeepSeek, ...) and each shows context size and per-million-token prices.
+- Replies stream from the page straight to `POST /chat/completions` (OPTIONS preflight verified: 204, `*`).
+- Picking anything in the GPU list switches back to local inference; the header chip shows which route is in use.
+- Trade-off, stated in the UI: hosted replies leave the browser, so they are not private the way local inference is.
+
+Regression checks worth knowing: the hosted path must work with WebGPU absent, Stop must abort the request rather than
+just stop rendering, and a 401/402/429 must explain itself instead of showing raw JSON.
