@@ -220,10 +220,18 @@
                 App key <span class="field-hint">from the Handy developer portal</span>
                 <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional" />
               </label>
+              <label class="field">
+                How it moves
+                <select id="handyMode">
+                  <option value="hamp">Steady speed · one continuous stroke</option>
+                  <option value="hdsp">Scene-synced · real strokes, timed from the text</option>
+                </select>
+              </label>
+              <p class="field-note" id="handyModeNote"></p>
               <p class="field-note">
                 Unlike the two above, The Handy is driven through its vendor's cloud, so commands travel over the
-                internet and the connection key identifies your device to them. Still only intensity and speed — no
-                text. The stroker keeps running if this tab dies, so Stop is not optional here.
+                internet and the connection key identifies your device to them. Still only intensity, speed and
+                position — no text. The stroker keeps running if this tab dies, so Stop is not optional here.
               </p>
             </div>
 

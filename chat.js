@@ -187,6 +187,7 @@ const DEFAULT_SETTINGS = {
     buttplugUrl: 'ws://127.0.0.1:12345',
     handyKey: '',
     handyAppKey: '',
+    handyMode: 'hamp',
     cap: 60,
     confirmed: false,
   },
@@ -292,6 +293,8 @@ const els = {
   buttplugUrl: $('buttplugUrl'),
   handyKey: $('handyKey'),
   handyAppKey: $('handyAppKey'),
+  handyMode: $('handyMode'),
+  handyModeNote: $('handyModeNote'),
   deviceMax: $('deviceMax'),
   deviceMaxOut: $('deviceMaxOut'),
   deviceConnect: $('deviceConnectBtn'),
@@ -340,6 +343,7 @@ function loadSettings() {
   if (typeof device.buttplugUrl !== 'string') device.buttplugUrl = 'ws://127.0.0.1:12345';
   if (typeof device.handyKey !== 'string') device.handyKey = '';
   if (typeof device.handyAppKey !== 'string') device.handyAppKey = '';
+  device.handyMode = HANDY_MODES.includes(device.handyMode) ? device.handyMode : 'hamp';
 }
 
 function clampSetting(value, fallback, low = 5, high = 100) {
@@ -1496,6 +1500,26 @@ const DEVICE_CONFIRM_COPY = {
 
 const deviceConfig = () => state.settings.device;
 
+const HANDY_MODES = ['hamp', 'hdsp'];
+
+// Only The Handy offers a choice here, because only it can either hold one speed or be
+// stepped to positions. The copy is the selector's other half: the two modes feel
+// different and cost different amounts of traffic, so picking one is an informed choice.
+const HANDY_MODE_COPY = {
+  hamp: 'Steady speed: one continuous stroke whose speed rises and falls with the reply. Smooth and predictable, and it uses a handful of requests per minute.',
+  hdsp: 'Scene-synced strokes: the device really strokes back and forth, timed from the text — shorter and faster as the prose heats up, slower when it eases, and still when the text goes quiet. Closer to the scene, but it sends a position about twice a second over the internet, so a slow connection can make it feel mechanical.',
+};
+
+function renderHandyModeNote() {
+  if (!els.handyModeNote) return;
+  const mode = HANDY_MODES.includes(deviceConfig().handyMode) ? deviceConfig().handyMode : 'hamp';
+  const contrast =
+    mode === 'hdsp'
+      ? 'Steady speed is the smoother, lighter option if the strokes feel jerky.'
+      : 'Scene-synced is the closer option if you want it to follow what is happening rather than the pace of the writing.';
+  els.handyModeNote.textContent = `${HANDY_MODE_COPY[mode]} ${contrast}`;
+}
+
 function setDeviceStatus(text) {
   state.deviceStatus = text || '';
   renderDeviceStatus();
@@ -1503,6 +1527,7 @@ function setDeviceStatus(text) {
 
 function buildDeviceUi() {
   const config = deviceConfig();
+  if (els.handyMode) els.handyMode.value = HANDY_MODES.includes(config.handyMode) ? config.handyMode : 'hamp';
   if (els.deviceKind) els.deviceKind.value = DEVICE_KINDS.includes(config.kind) ? config.kind : 'off';
   if (els.lovenseHost) els.lovenseHost.value = config.lovenseHost;
   if (els.lovensePort) els.lovensePort.value = String(config.lovensePort);
@@ -1521,6 +1546,7 @@ function renderDeviceFields() {
   if (els.deviceFieldsButtplug) els.deviceFieldsButtplug.hidden = kind !== 'buttplug';
   if (els.deviceFieldsHandy) els.deviceFieldsHandy.hidden = kind !== 'handy';
   if (els.deviceConfirmBody) els.deviceConfirmBody.textContent = DEVICE_CONFIRM_COPY[kind] || '';
+  renderHandyModeNote();
   syncDeviceControls();
 }
 
@@ -1530,6 +1556,8 @@ function syncDeviceControls() {
   if (els.deviceStop) els.deviceStop.disabled = !connected;
   if (els.deviceDisconnect) els.deviceDisconnect.disabled = !connected;
   if (els.deviceKind) els.deviceKind.disabled = connected;
+  // The mode is sent once at connect, so changing it mid-session would be a lie.
+  if (els.handyMode) els.handyMode.disabled = connected;
 }
 
 function renderDeviceStatus() {
@@ -2160,6 +2188,12 @@ function bindEvents() {
   saveDeviceField('buttplugUrl', els.buttplugUrl);
   saveDeviceField('handyKey', els.handyKey);
   saveDeviceField('handyAppKey', els.handyAppKey);
+  els.handyMode?.addEventListener('change', () => {
+    const choice = els.handyMode.value;
+    deviceConfig().handyMode = HANDY_MODES.includes(choice) ? choice : 'hamp';
+    saveSettings();
+    renderHandyModeNote();
+  });
   els.deviceMax?.addEventListener('input', () => {
     deviceConfig().cap = clampSetting(els.deviceMax.value, 60);
     if (els.deviceMaxOut) els.deviceMaxOut.value = String(deviceConfig().cap);

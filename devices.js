@@ -20,6 +20,17 @@ export const REACTION_TICK_MS = 1500;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
+// Scene-synced strokes: faster prose means a shorter half-stroke. 650 ms at rest, 240 ms
+// at full intensity, which is also the ceiling the vendor's API accepts comfortably.
+export function handyHalfPeriod(level) {
+  return Math.round(650 - 410 * clamp(Number(level) || 0, 0, 1));
+}
+
+// HDSP works in percent of the stroke zone, so a stroke is "be at this end in T ms".
+export function handyStrokeTarget(phase) {
+  return phase ? 100 : 0;
+}
+
 async function timedFetch(url, options = {}, ms = 6000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -74,6 +85,11 @@ export class Reaction {
   // Called on every tick: quiet text bleeds off instead of holding at the last peak.
   sample() {
     if (performance.now() - this.lastAt > 1200) this.level += (0 - this.level) * 0.5;
+    return this.peek();
+  }
+
+  // Reading the level must not advance the decay, or a fast reader would age it faster.
+  peek() {
     return clamp(this.level, 0, this.cap);
   }
 }
@@ -367,7 +383,17 @@ class HandyLink {
     this.kind = 'handy';
     this.config = config;
     this.label = 'The Handy';
+    // 'hamp' is one continuous stroke speed; 'hdsp' is real strokes timed from the text.
+    this.mode = config.handyMode === 'hdsp' ? 'hdsp' : 'hamp';
+    // Set by the controller: lets every stroke read the freshest intensity instead of the
+    // last one-second-and-a-half snapshot.
+    this.levelSource = null;
     this.moving = false;
+    this.stroking = false;
+    this.activeMode = null;
+    this.level = 0;
+    this.phase = false;
+    this.strokeTimer = 0;
   }
 
   headers() {
@@ -408,12 +434,27 @@ class HandyLink {
     }
     const info = await this.call('info').catch(() => null);
     this.label = info?.model ? `The Handy (${info.model})` : 'The Handy';
-    await this.call('mode', 'PUT', { mode: 0 });
+    await this.useMode(this.mode);
     return this.label;
   }
 
+  // HAMP is mode 0 and HDSP is mode 2; the mode decides which commands are legal, and
+  // switching is also how a stroke still in flight gets cancelled.
+  async useMode(mode) {
+    if (this.activeMode === mode) return;
+    await this.call('mode', 'PUT', { mode: mode === 'hdsp' ? 2 : 0 });
+    this.activeMode = mode;
+  }
+
   async setLevel(level) {
-    const velocity = Math.round(clamp(level, 0, 1) * 100);
+    const value = clamp(level, 0, 1);
+    this.level = value;
+    if (this.mode === 'hdsp') {
+      this.startStrokes();
+      return;
+    }
+    await this.useMode('hamp');
+    const velocity = Math.round(value * 100);
     if (!this.moving) {
       await this.call('hamp/start', 'PUT', {});
       this.moving = true;
@@ -421,9 +462,54 @@ class HandyLink {
     await this.call('hamp/velocity', 'PUT', { velocity });
   }
 
-  async stop() {
-    if (!this.moving) return;
+  // HDSP takes one position and one duration at a time, so strokes are scheduled back and
+  // forth rather than approximated with a constant speed.
+  // Starts the loop before the first text arrives, so the opening of a reply is not dead
+  // air waiting for an intensity tick.
+  async start() {
+    if (this.mode !== 'hdsp') return;
+    this.startStrokes();
+  }
+
+  startStrokes() {
+    if (this.stroking) return;
+    this.stroking = true;
     this.moving = false;
+    const pump = () => {
+      if (!this.stroking) return;
+      const level = typeof this.levelSource === 'function' ? this.levelSource() : this.level;
+      this.level = level;
+      // Quiet text is a pause, not a slow grind: keep checking, do not stroke.
+      if (level < 0.1) {
+        this.strokeTimer = setTimeout(pump, 300);
+        return;
+      }
+      const half = handyHalfPeriod(level);
+      const position = handyStrokeTarget(this.phase);
+      this.phase = !this.phase;
+      // One command per half-stroke; a failure costs a single stroke, not the reply.
+      void this.useMode('hdsp').then(() =>
+        this.call('hdsp/xpt', 'PUT', { position, duration: half, stopOnTarget: true }).catch(() => {})
+      );
+      this.strokeTimer = setTimeout(pump, half);
+    };
+    pump();
+  }
+
+  stopStrokes() {
+    this.stroking = false;
+    if (this.strokeTimer) {
+      clearTimeout(this.strokeTimer);
+      this.strokeTimer = 0;
+    }
+  }
+
+  async stop() {
+    this.stopStrokes();
+    if (!this.moving && this.activeMode === null) return;
+    if (this.moving) this.moving = false;
+    // Switching back to HAMP cancels a stroke still in flight, then stops the device there.
+    await this.useMode('hamp');
     await this.call('hamp/stop', 'PUT', {});
   }
 
@@ -510,6 +596,7 @@ export function createDevices({ onStatus } = {}) {
       const label = await chosen.connect();
       link = chosen;
       reaction = new Reaction({ cap });
+      chosen.levelSource = () => reaction.peek();
       failures = 0;
       muted = false;
       report('');
@@ -525,6 +612,7 @@ export function createDevices({ onStatus } = {}) {
       if (!link) return;
       muted = false;
       reaction?.reset();
+      void link.start?.();
       clearInterval(timer);
       timer = setInterval(() => {
         void tick();

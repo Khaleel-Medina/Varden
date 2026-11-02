@@ -262,9 +262,18 @@ Three transports, because they are genuinely different deals:
   `ws://127.0.0.1:12345`. Nothing leaves the machine and the localhost exception means no mixed-content problem. Costs
   the visitor a desktop install.
 - **The Handy** — the vendor's cloud (`https://www.handyfeeling.com/api/handy/v2/`) with the visitor's connection key
-  and, if their developer portal issued one, an app key. HAMP mode (`mode: 0`) with velocity 0-100. Unlike the two
-  above this needs no local anything, but commands travel over the internet and the stroker keeps running if the tab
-  dies — the panel says so, and Stop is the documented exit.
+  and, if their developer portal issued one, an app key. It is the only device with a choice of two modes, and the
+  panel explains the difference next to the selector:
+  - *Steady speed* (HAMP, `mode: 0`) sends one velocity 0-100 per tick. Smooth, predictable, a handful of requests per
+    minute.
+  - *Scene-synced* (HDSP, `mode: 2`) sends alternating positions (`hdsp/xpt`, 0% and 100% of the stroke zone) with a
+    duration of 650 ms down to 240 ms per half-stroke, so faster prose really strokes faster. Below ten percent
+    intensity the strokes stop rather than slow to a crawl. It costs roughly two requests a second, which is the
+    reason it is not the default and the reason a slow connection can make it feel mechanical.
+
+  Unlike the two above this needs no local anything, but commands travel over the internet and the stroker keeps
+  running if the tab dies — the panel says so, and Stop is the documented exit. Stopping switches the device back to
+  HAMP first, which also cancels any stroke still in flight, then stops it there.
 
 Safety rules the code enforces: never an indefinite hold (Lovense gets `timeSec: 2`, refreshed every 1.5 s, so a
 closed tab stops moving within two seconds), Stop / tab hidden / `pagehide` / end of reply / disconnect all send a
