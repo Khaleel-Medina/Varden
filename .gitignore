@@ -4,3 +4,9 @@ dist/
 *.log
 .env
 .env.local
+
+# keep local secrets out of git (the template stays tracked)
+.env.*
+!.env.example
+.dev.vars
+*.pem
