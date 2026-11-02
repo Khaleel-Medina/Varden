@@ -18,7 +18,20 @@ import {
   saveCharacter,
   uid,
 } from './cards.js';
-import { fetchSharedCard, getSharedUser, listSharedCards, shareCard } from './shared.js';
+import {
+  cardArtUrl,
+  deleteSharedCard,
+  fetchSharedCard,
+  getSharedUser,
+  listMyCards,
+  listSharedCards,
+  onAuthChange,
+  shareCard,
+  signIn,
+  signOut,
+  signUp,
+  updateSharedCard,
+} from './shared.js';
 
 const state = {
   characters: [],
@@ -29,7 +42,10 @@ const state = {
   editingId: null,
   avatar: null,
   lore: [],
-  shared: { cards: [], error: null, user: null, loading: false },
+  shared: { cards: [], error: null, user: null, loading: false, mine: [], mineError: null, mineLoading: false },
+  account: { mode: 'signin', busy: false },
+  share: { character: null, busy: false },
+  upload: { row: null, character: null, busy: false },
 };
 
 const els = {
@@ -70,6 +86,45 @@ const els = {
   sharedGrid: document.getElementById('sharedGrid'),
   sharedNote: document.getElementById('sharedNote'),
   refreshShared: document.getElementById('refreshShared'),
+  accountBtn: document.getElementById('accountBtn'),
+  accountDialog: document.getElementById('accountDialog'),
+  accountForm: document.getElementById('accountForm'),
+  accountTitle: document.getElementById('accountTitle'),
+  accountNote: document.getElementById('accountNote'),
+  accountFields: document.getElementById('accountFields'),
+  accountEmail: document.getElementById('accountEmail'),
+  accountPassword: document.getElementById('accountPassword'),
+  accountError: document.getElementById('accountError'),
+  accountSignedOut: document.getElementById('accountSignedOut'),
+  accountSignedIn: document.getElementById('accountSignedIn'),
+  accountToggle: document.getElementById('accountToggle'),
+  accountSubmit: document.getElementById('accountSubmit'),
+  accountSignOut: document.getElementById('accountSignOut'),
+  accountDone: document.getElementById('accountDone'),
+  accountClose: document.getElementById('accountClose'),
+  shareDialog: document.getElementById('shareDialog'),
+  shareForm: document.getElementById('shareForm'),
+  shareTitle: document.getElementById('shareTitle'),
+  shareClose: document.getElementById('shareClose'),
+  shareCancel: document.getElementById('shareCancel'),
+  shareConfirm: document.getElementById('shareConfirm'),
+  uploadDialog: document.getElementById('uploadDialog'),
+  uploadForm: document.getElementById('uploadForm'),
+  uploadTitle: document.getElementById('uploadTitle'),
+  uploadClose: document.getElementById('uploadClose'),
+  uploadCancel: document.getElementById('uploadCancel'),
+  uploadSave: document.getElementById('uploadSave'),
+  uploadDelete: document.getElementById('uploadDelete'),
+  uploadError: document.getElementById('uploadError'),
+  fUploadName: document.getElementById('fUploadName'),
+  fUploadCreator: document.getElementById('fUploadCreator'),
+  fUploadTagline: document.getElementById('fUploadTagline'),
+  fUploadTags: document.getElementById('fUploadTags'),
+  fUploadVisibility: document.getElementById('fUploadVisibility'),
+  myCardsSection: document.getElementById('myCardsSection'),
+  myCardsNote: document.getElementById('myCardsNote'),
+  myGrid: document.getElementById('myGrid'),
+  refreshMine: document.getElementById('refreshMine'),
 };
 
 function toast(message, tone = 'ok') {
@@ -718,7 +773,7 @@ function renderShared() {
     return;
   }
 
-  els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library.`;
+  els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library. Drafts marked private are not listed here.`;
   els.sharedGrid.append(...cards.map(sharedCardRow));
 }
 
@@ -731,15 +786,8 @@ async function loadShared() {
   return state.shared;
 }
 
-async function shareToLibrary(character) {
-  toast(`Publishing ${character.name}…`);
-  try {
-    await shareCard(character);
-    toast(`${character.name} published. Anyone can download it now.`);
-    await loadShared();
-  } catch (error) {
-    toast(error?.message || String(error), 'bad');
-  }
+function shareToLibrary(character) {
+  openShareDialog(character);
 }
 
 async function pullSharedCard(id) {
@@ -761,19 +809,383 @@ async function pullSharedCard(id) {
   }
 }
 
+/* ---------------- accounts ---------------- */
+
+const ACCOUNT_NOTE =
+  'An account exists only so you can edit or delete the cards you publish and keep drafts private. Characters and chats stay in this browser.';
+
+function authUser() {
+  return state.shared.user;
+}
+
+function renderAccount() {
+  const user = authUser();
+  if (els.accountBtn) {
+    els.accountBtn.textContent = user ? 'Account' : 'Sign in';
+    els.accountBtn.title = user ? `Signed in as ${user.email}` : 'Sign in to publish, edit or delete cards';
+  }
+  if (els.accountSignedIn) els.accountSignedIn.hidden = !user;
+  if (els.accountSignedOut) els.accountSignedOut.hidden = Boolean(user);
+  if (els.accountFields) els.accountFields.hidden = Boolean(user);
+  if (els.accountTitle) {
+    els.accountTitle.textContent = user
+      ? 'Signed in'
+      : state.account.mode === 'signup'
+        ? 'Create an account'
+        : 'Sign in';
+  }
+  if (els.accountSubmit) els.accountSubmit.textContent = state.account.mode === 'signup' ? 'Create account' : 'Sign in';
+  if (els.accountToggle) {
+    els.accountToggle.textContent = state.account.mode === 'signup' ? 'I already have an account' : 'Create an account';
+  }
+  if (els.accountNote && !authUser()) els.accountNote.textContent = ACCOUNT_NOTE;
+}
+
+function showAccountError(message) {
+  if (!els.accountError) return;
+  els.accountError.textContent = message || '';
+  els.accountError.hidden = !message;
+}
+
+function openAccountDialog(note) {
+  showAccountError('');
+  if (els.accountNote) els.accountNote.textContent = note || ACCOUNT_NOTE;
+  renderAccount();
+  if (authUser() && els.accountNote) {
+    els.accountNote.textContent = `Signed in as ${authUser().email}. You can edit or delete anything you publish.`;
+  }
+  els.accountDialog?.showModal();
+}
+
+async function submitAccount() {
+  if (state.account.busy) return;
+  const email = els.accountEmail.value.trim();
+  const password = els.accountPassword.value;
+  if (!email || password.length < 6) {
+    showAccountError('Enter an email address and a password of at least 6 characters.');
+    return;
+  }
+  state.account.busy = true;
+  if (els.accountSubmit) els.accountSubmit.disabled = true;
+  showAccountError('');
+  try {
+    if (state.account.mode === 'signup') {
+      const result = await signUp(email, password);
+      if (result.needsConfirmation) {
+        state.account.mode = 'signin';
+        renderAccount();
+        showAccountError('Account created. Open the confirmation email, then sign in here.');
+        return;
+      }
+      toast('Account created. You can publish cards now.');
+    } else {
+      await signIn(email, password);
+      toast('Signed in.');
+    }
+    els.accountPassword.value = '';
+    els.accountDialog?.close();
+  } catch (error) {
+    showAccountError(error?.message || String(error));
+  } finally {
+    state.account.busy = false;
+    if (els.accountSubmit) els.accountSubmit.disabled = false;
+  }
+}
+
+async function handleSignOut() {
+  try {
+    await signOut();
+    toast('Signed out.');
+    els.accountDialog?.close();
+  } catch (error) {
+    showAccountError(error?.message || String(error));
+  }
+}
+
+/* ---------------- my uploads ---------------- */
+
+function visibilityBadge(card) {
+  const badge = document.createElement('span');
+  badge.className = `vis-badge ${card.visibility === 'private' ? 'is-private' : 'is-public'}`;
+  badge.textContent = card.visibility === 'private' ? 'Private' : 'Public';
+  return badge;
+}
+
+function myCardRow(card) {
+  const article = document.createElement('article');
+  article.className = 'shared-card my-card';
+
+  const art = document.createElement('div');
+  art.className = 'shared-card-art';
+  setAccent(art, ['#6d5dfc', '#10131d', '#3ad6c6']);
+  if (card.card_url) {
+    const image = document.createElement('img');
+    image.src = card.card_url;
+    image.alt = `${card.name} card art`;
+    image.loading = 'lazy';
+    art.append(image);
+  } else {
+    cardArtUrl(card).then((url) => {
+      if (!url) return;
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = `${card.name} card art`;
+      image.loading = 'lazy';
+      art.append(image);
+    });
+  }
+  art.append(visibilityBadge(card));
+
+  const body = document.createElement('div');
+  body.className = 'shared-card-body';
+
+  const title = document.createElement('strong');
+  title.textContent = card.name || 'Untitled card';
+  const meta = document.createElement('span');
+  meta.className = 'shared-card-by';
+  const stamp = card.updated_at || card.created_at;
+  const size = card.size ? `${Math.round(card.size / 1024)} KB · ` : '';
+  meta.textContent = `${size}updated ${stamp ? new Date(stamp).toLocaleDateString() : 'just now'}`;
+  const tagline = document.createElement('p');
+  tagline.textContent = card.tagline || '';
+
+  const actions = document.createElement('div');
+  actions.className = 'my-card-actions';
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'solid-button';
+  edit.dataset.editUpload = card.id;
+  edit.textContent = 'Edit';
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'ghost-button danger';
+  remove.dataset.deleteUpload = card.id;
+  remove.textContent = 'Delete';
+  actions.append(edit, remove);
+
+  body.append(title, meta, tagline, actions);
+  article.append(art, body);
+  return article;
+}
+
+function renderMine() {
+  if (!els.myCardsSection) return;
+  const user = authUser();
+  els.myCardsSection.hidden = !user;
+  if (!user) return;
+
+  els.myGrid.replaceChildren();
+  if (state.shared.mineLoading) {
+    els.myCardsNote.textContent = 'Loading your uploads…';
+    return;
+  }
+  if (state.shared.mineError) {
+    els.myCardsNote.textContent = state.shared.mineError;
+    return;
+  }
+  if (!state.shared.mine.length) {
+    els.myCardsNote.textContent = 'Nothing published yet. Use Share on any card to upload it as public or private.';
+    return;
+  }
+  const published = state.shared.mine.filter((card) => card.visibility !== 'private').length;
+  const drafts = state.shared.mine.length - published;
+  els.myCardsNote.textContent = `${state.shared.mine.length} upload${
+    state.shared.mine.length === 1 ? '' : 's'
+  } · ${published} public · ${drafts} private. Editing rebuilds the PNG so the download matches.`;
+  els.myGrid.append(...state.shared.mine.map(myCardRow));
+}
+
+async function loadMine() {
+  if (!authUser()) {
+    state.shared.mine = [];
+    state.shared.mineError = null;
+    renderMine();
+    return;
+  }
+  state.shared.mineLoading = true;
+  renderMine();
+  const { cards, error } = await listMyCards();
+  state.shared.mine = cards;
+  state.shared.mineError = error;
+  state.shared.mineLoading = false;
+  renderMine();
+}
+
+/* ---------------- publishing + editing ---------------- */
+
+function openShareDialog(character) {
+  state.share.character = character;
+  if (!authUser()) {
+    openAccountDialog('Sign in first — a published card needs an owner so it can be edited or deleted later.');
+    return;
+  }
+  if (els.shareTitle) els.shareTitle.textContent = `Share ${character.name}`;
+  const publicChoice = els.shareForm?.querySelector('input[name="shareVisibility"][value="public"]');
+  if (publicChoice) publicChoice.checked = true;
+  els.shareDialog?.showModal();
+}
+
+async function confirmShare() {
+  const character = state.share.character;
+  if (!character || state.share.busy) return;
+  const picked = els.shareForm?.querySelector('input[name="shareVisibility"]:checked');
+  const visibility = picked?.value === 'private' ? 'private' : 'public';
+  state.share.busy = true;
+  if (els.shareConfirm) els.shareConfirm.disabled = true;
+  try {
+    await shareCard(character, { visibility });
+    toast(
+      visibility === 'private'
+        ? `${character.name} saved as a private draft. Only you can open it.`
+        : `${character.name} published. Anyone can download it now.`
+    );
+    els.shareDialog?.close();
+    await Promise.all([loadShared(), loadMine()]);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  } finally {
+    state.share.busy = false;
+    if (els.shareConfirm) els.shareConfirm.disabled = false;
+  }
+}
+
+function showUploadError(message) {
+  if (!els.uploadError) return;
+  els.uploadError.textContent = message || '';
+  els.uploadError.hidden = !message;
+}
+
+async function editUpload(id) {
+  const row = state.shared.mine.find((card) => card.id === id);
+  if (!row) return;
+  showUploadError('');
+  if (els.uploadTitle) els.uploadTitle.textContent = `Edit ${row.name}`;
+  els.fUploadName.value = row.name || '';
+  els.fUploadCreator.value = row.creator || '';
+  els.fUploadTagline.value = row.tagline || '';
+  els.fUploadTags.value = (row.tags || []).join(', ');
+  els.fUploadVisibility.value = row.visibility === 'private' ? 'private' : 'public';
+  state.upload = { row, character: null, busy: false };
+  els.uploadDialog?.showModal();
+  try {
+    const { character } = await fetchSharedCard(row);
+    state.upload.character = character;
+  } catch (error) {
+    showUploadError(`Could not read the published card, so saving is disabled: ${error?.message || error}`);
+  }
+}
+
+async function saveUpload(event) {
+  event?.preventDefault?.();
+  const { row, character } = state.upload;
+  if (!row || !character || state.upload.busy) return;
+  const visibility = els.fUploadVisibility.value === 'private' ? 'private' : 'public';
+  const updated = normalizeCharacter({
+    ...character,
+    name: els.fUploadName.value.trim() || character.name,
+    creator: els.fUploadCreator.value.trim() || 'Anonymous',
+    tagline: els.fUploadTagline.value.trim(),
+    tags: els.fUploadTags.value.split(',').map((tag) => tag.trim()).filter(Boolean),
+  });
+  state.upload.busy = true;
+  if (els.uploadSave) els.uploadSave.disabled = true;
+  showUploadError('');
+  try {
+    await updateSharedCard(row, updated, { visibility });
+    toast(`${updated.name} updated.`);
+    els.uploadDialog?.close();
+    await Promise.all([loadShared(), loadMine()]);
+  } catch (error) {
+    showUploadError(error?.message || String(error));
+  } finally {
+    state.upload.busy = false;
+    if (els.uploadSave) els.uploadSave.disabled = false;
+  }
+}
+
+async function removeUpload(id) {
+  const row = state.shared.mine.find((card) => card.id === id);
+  if (!row) return;
+  const question = `Delete the published card "${row.name}"? The PNG and its listing are removed. This cannot be undone.`;
+  if (!window.confirm(question)) return;
+  try {
+    await deleteSharedCard(row);
+    toast(`${row.name} deleted.`);
+    els.uploadDialog?.close();
+    await Promise.all([loadShared(), loadMine()]);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
 function initShared() {
   els.refreshShared?.addEventListener('click', () => loadShared());
+  els.refreshMine?.addEventListener('click', () => loadMine());
+
+  els.accountBtn?.addEventListener('click', () => openAccountDialog());
+  els.accountClose?.addEventListener('click', () => els.accountDialog.close());
+  els.accountDone?.addEventListener('click', () => els.accountDialog.close());
+  els.accountSignOut?.addEventListener('click', handleSignOut);
+  els.accountToggle?.addEventListener('click', () => {
+    state.account.mode = state.account.mode === 'signup' ? 'signin' : 'signup';
+    showAccountError('');
+    renderAccount();
+  });
+  els.accountForm?.addEventListener('submit', (event) => {
+    if (event.submitter && event.submitter.value === 'cancel') return;
+    event.preventDefault();
+    submitAccount();
+  });
+
+  els.shareClose?.addEventListener('click', () => els.shareDialog.close());
+  els.shareCancel?.addEventListener('click', () => els.shareDialog.close());
+  els.shareConfirm?.addEventListener('click', confirmShare);
+
+  els.uploadClose?.addEventListener('click', () => els.uploadDialog.close());
+  els.uploadCancel?.addEventListener('click', () => els.uploadDialog.close());
+  els.uploadForm?.addEventListener('submit', (event) => {
+    if (event.submitter && event.submitter.value === 'cancel') return;
+    saveUpload(event);
+  });
+  els.uploadDelete?.addEventListener('click', () => {
+    if (state.upload.row) removeUpload(state.upload.row.id);
+  });
+
   document.addEventListener('click', (event) => {
-    const shareButton = event.target.closest?.('[data-share]');
-    if (shareButton) {
-      const character = state.characters.find((item) => item.id === shareButton.dataset.share);
-      if (character) shareToLibrary(character);
+    const target = event.target.closest?.('[data-share], [data-pull], [data-edit-upload], [data-delete-upload]');
+    if (!target) return;
+    if (target.dataset.share) {
+      const character = state.characters.find((item) => item.id === target.dataset.share);
+      if (character) openShareDialog(character);
       return;
     }
-    const pullButton = event.target.closest?.('[data-pull]');
-    if (pullButton) pullSharedCard(pullButton.dataset.pull);
+    if (target.dataset.pull) {
+      pullSharedCard(target.dataset.pull);
+      return;
+    }
+    if (target.dataset.editUpload) {
+      editUpload(target.dataset.editUpload);
+      return;
+    }
+    if (target.dataset.deleteUpload) removeUpload(target.dataset.deleteUpload);
   });
+
+  onAuthChange((user) => {
+    const changed = (state.shared.user?.id || null) !== (user?.id || null);
+    state.shared.user = user;
+    renderAccount();
+    if (changed) loadMine();
+  });
+
+  renderAccount();
   loadShared();
+  getSharedUser().then((user) => {
+    if (!state.shared.user && user) {
+      state.shared.user = user;
+      renderAccount();
+      loadMine();
+    }
+  });
 }
 
 async function init() {

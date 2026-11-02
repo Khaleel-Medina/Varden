@@ -24,6 +24,7 @@
         <a href="./get-started.html">Get Started</a>
       </nav>
       <div class="lib-nav-actions">
+        <button class="ghost-button" id="accountBtn" type="button">Sign in</button>
         <button class="ghost-button" id="importBtn" type="button">Import cards</button>
         <button class="solid-button" id="newCharacterBtn" type="button">New character</button>
       </div>
@@ -76,6 +77,18 @@
       <section class="lib-grid" id="characterGrid" aria-live="polite"></section>
 
       <p class="lib-drop-hint" id="dropHint">Drop PNG or JSON character cards anywhere on this page to import them.</p>
+
+      <section class="lib-shared lib-mine" id="myCardsSection" aria-labelledby="myCardsHeading" hidden>
+        <div class="lib-shared-head">
+          <div>
+            <p class="eyebrow">Your uploads</p>
+            <h2 id="myCardsHeading">My cards</h2>
+            <p class="field-note" id="myCardsNote">Sign in to manage what you have uploaded.</p>
+          </div>
+          <button class="ghost-button" id="refreshMine" type="button">Refresh</button>
+        </div>
+        <div class="lib-shared-grid" id="myGrid"></div>
+      </section>
 
       <section class="lib-shared" aria-labelledby="sharedHeading">
         <div class="lib-shared-head">
@@ -182,6 +195,140 @@
         <div class="dialog-actions">
           <button class="ghost-button" value="cancel" type="button" id="editorCancel">Cancel</button>
           <button class="solid-button" value="default" type="submit" id="editorSave">Save character</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="creator-dialog lib-dialog mini-dialog" id="accountDialog">
+      <form class="creator-form" id="accountForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow" id="accountEyebrow">Account</p>
+            <h2 id="accountTitle">Sign in</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="accountClose" aria-label="Close">x</button>
+        </div>
+
+        <p class="field-note" id="accountNote">
+          An account exists only so you can edit or delete the cards you publish and keep drafts private. Characters and
+          chats stay in this browser.
+        </p>
+
+        <div class="form-grid" id="accountFields">
+          <label>
+            Email
+            <input id="accountEmail" type="email" required autocomplete="email" placeholder="you@example.com" />
+          </label>
+          <label>
+            Password
+            <input
+              id="accountPassword"
+              type="password"
+              required
+              minlength="6"
+              autocomplete="current-password"
+              placeholder="at least 6 characters"
+            />
+          </label>
+        </div>
+
+        <p class="form-error" id="accountError" hidden></p>
+
+        <div class="dialog-actions" id="accountSignedOut">
+          <button class="ghost-button" type="button" id="accountToggle">Create an account</button>
+          <button class="solid-button" value="default" type="submit" id="accountSubmit">Sign in</button>
+        </div>
+
+        <div class="dialog-actions" id="accountSignedIn" hidden>
+          <button class="ghost-button" type="button" id="accountSignOut">Sign out</button>
+          <button class="solid-button" value="cancel" type="button" id="accountDone">Done</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="creator-dialog lib-dialog mini-dialog" id="shareDialog">
+      <form class="creator-form" id="shareForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Publish</p>
+            <h2 id="shareTitle">Share this card</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="shareClose" aria-label="Close">x</button>
+        </div>
+
+        <p class="field-note" id="shareNote">
+          Publishing builds the PNG card and uploads it. Public cards appear in Community; private ones stay visible to
+          you only, and you can switch them later.
+        </p>
+
+        <div class="share-choices">
+          <label class="share-choice">
+            <input type="radio" name="shareVisibility" value="public" checked />
+            <span><strong>Public</strong> — listed in Community, anyone can download it.</span>
+          </label>
+          <label class="share-choice">
+            <input type="radio" name="shareVisibility" value="private" />
+            <span><strong>Private</strong> — a work in progress only you can open.</span>
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="button" id="shareCancel">Cancel</button>
+          <button class="solid-button" value="default" type="button" id="shareConfirm">Publish card</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="creator-dialog lib-dialog" id="uploadDialog">
+      <form class="creator-form" id="uploadForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Published card</p>
+            <h2 id="uploadTitle">Edit card</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="uploadClose" aria-label="Close">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input id="fUploadName" required maxlength="60" />
+          </label>
+          <label>
+            Creator
+            <input id="fUploadCreator" maxlength="40" />
+          </label>
+        </div>
+
+        <label>
+          Tagline
+          <input id="fUploadTagline" maxlength="140" />
+        </label>
+
+        <label>
+          Tags <span class="field-hint">comma separated</span>
+          <input id="fUploadTags" />
+        </label>
+
+        <label>
+          Visibility
+          <select id="fUploadVisibility">
+            <option value="public">Public — listed in Community</option>
+            <option value="private">Private — only you can open it</option>
+          </select>
+        </label>
+
+        <p class="field-note">
+          Saving rebuilds the PNG so the download matches these fields. Switching visibility moves the file between the
+          public and private buckets.
+        </p>
+
+        <p class="form-error" id="uploadError" hidden></p>
+
+        <div class="dialog-actions">
+          <button class="ghost-button danger" value="cancel" type="button" id="uploadDelete">Delete</button>
+          <button class="ghost-button" value="cancel" type="button" id="uploadCancel">Cancel</button>
+          <button class="solid-button" value="default" type="submit" id="uploadSave">Save changes</button>
         </div>
       </form>
     </dialog>

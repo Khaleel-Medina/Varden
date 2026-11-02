@@ -2698,3 +2698,103 @@ body.dragging {
     flex: 1;
   }
 }
+
+/* ---------------- accounts, drafts and upload management ---------------- */
+
+.mini-dialog {
+  max-width: 520px;
+}
+
+.form-error {
+  margin: 0;
+  color: #ff9d9d;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.share-choices {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.share-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  cursor: pointer;
+  line-height: 1.45;
+}
+
+.share-choice input {
+  margin-top: 0.2rem;
+  accent-color: #6d5dfc;
+}
+
+.share-choice:has(input:checked) {
+  border-color: rgba(109, 93, 252, 0.75);
+  background: rgba(109, 93, 252, 0.12);
+}
+
+.lib-mine .lib-shared-head h2 {
+  margin-bottom: 0.2rem;
+}
+
+.my-card .shared-card-art {
+  position: relative;
+}
+
+.my-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.vis-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.16rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  backdrop-filter: blur(6px);
+}
+
+.vis-badge.is-public {
+  background: rgba(58, 214, 198, 0.22);
+  color: #b6f4ec;
+  border: 1px solid rgba(58, 214, 198, 0.5);
+}
+
+.vis-badge.is-private {
+  background: rgba(243, 179, 90, 0.2);
+  color: #f7d3a0;
+  border: 1px solid rgba(243, 179, 90, 0.5);
+}
+
+.ghost-button.danger,
+.lib-menu button.danger {
+  color: #ff9d9d;
+  border-color: rgba(255, 120, 120, 0.4);
+}
+
+.ghost-button.danger:hover,
+.lib-menu button.danger:hover {
+  background: rgba(255, 120, 120, 0.12);
+}
+
+@media (max-width: 640px) {
+  .share-choice {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .my-card-actions button {
+    flex: 1 1 auto;
+  }
+}

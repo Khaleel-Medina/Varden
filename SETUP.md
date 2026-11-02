@@ -102,3 +102,30 @@ See `supabase-schema.sql` for the full database schema. Key tables:
 - **Vercel Blob Free** — 250MB storage, 1M reads/mo → $0
 - **Vercel Hosting Free** — serverless functions → $0
 - Your domain — ~$10/year (not from Vercel)
+
+## Accounts, drafts and editing uploads
+
+Publishing a card now belongs to an account, which is what makes editing and deleting possible later. Characters and
+chats never leave the browser; the account only owns the published PNGs.
+
+1. Run `supabase-shared-cards.sql`, then `supabase-accounts.sql`, in the Supabase SQL editor (Dashboard → SQL → New
+   query). Both are safe to run more than once.
+2. **Authentication → Providers → Email** must be enabled (it is by default).
+3. For instant sign-in while testing, turn off **Authentication → Providers → Email → Confirm email**. With it on, a new
+   account is created but cannot publish until the confirmation link is opened, and the site says so instead of
+   pretending it signed in.
+4. Drafts live in the `cards-private` bucket created by the migration. Its policy is owner-only, so a private card's
+   bytes cannot be fetched by guessing a URL — the owner sees the art through a one-hour signed URL.
+5. Column-level expectations: `shared_cards.visibility` is `public` or `private`, and `shared_cards.bucket` records which
+   bucket holds the file. Saving a card in the other state rebuilds the PNG and moves the file.
+
+## Models on GPUs without f16 shaders
+
+Half-precision (`q4f16_1`) models only compile on GPUs that expose the `shader-f16` WebGPU feature. On hardware that does
+not — older Intel/AMD integrated chips, and drivers that hide the feature — the shader module is rejected and the failure
+surfaces as `Invalid ShaderModule … entryPoint: index_kernel`.
+
+The chat page probes the adapter, disables models it cannot run, and falls back to an `f32` twin, which needs no f16
+feature at the cost of roughly 250 MB–1 GB more memory. The catalog's f32 entries are Llama 3.2 1B/3B, Hermes 3 (3B),
+Hermes 2 Pro (8B), Qwen2.5 1.5B/7B and Phi 3.5 mini. If a failure mentions stale shaders on an f32 model, clear the
+site's cached model files in DevTools → Application → Storage and reload.

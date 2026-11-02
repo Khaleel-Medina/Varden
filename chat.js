@@ -36,10 +36,26 @@ const DEFAULT_MODEL = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
 const MODEL_CATALOG = [
   { id: 'Qwen2.5-0.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 0.5B', vram: 944, note: 'Smallest option — quick to load, best for weaker hardware.' },
   { id: DEFAULT_MODEL, label: 'Llama 3.2 1B', vram: 879, note: 'Recommended start: the best quality that fits almost anywhere.', recommended: true },
+  {
+    id: 'Llama-3.2-1B-Instruct-q4f32_1-MLC',
+    label: 'Llama 3.2 1B (f32)',
+    vram: 1129,
+    f32: true,
+    note: 'The same model in a form any WebGPU chip can compile. Lightest safe pick when a GPU rejects f16 shaders.',
+  },
   { id: 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 1.5B', vram: 1629, note: 'Steadier prose than 1B, still fine on integrated GPUs.' },
+  {
+    id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
+    label: 'Qwen2.5 1.5B (f32)',
+    vram: 1889,
+    f32: true,
+    note: 'Same writing as the 1.5B above without the f16 shaders, for GPUs that cannot compile them.',
+  },
   { id: 'gemma-2-2b-it-q4f16_1-MLC', label: 'Gemma 2 2B', vram: 1895, note: 'Warm, conversational tone.' },
   { id: 'Llama-3.2-3B-Instruct-q4f16_1-MLC', label: 'Llama 3.2 3B', vram: 2263, note: 'Sweet spot for 8 GB unified memory machines.' },
+  { id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC', label: 'Llama 3.2 3B (f32)', vram: 2952, f32: true, note: 'The 3B in the shader form every GPU can compile.' },
   { id: 'Hermes-3-Llama-3.2-3B-q4f16_1-MLC', label: 'Hermes 3 (Llama 3.2 3B)', vram: 2263, note: 'Fine-tuned for staying in character — the strongest roleplay pick here.' },
+  { id: 'Hermes-3-Llama-3.2-3B-q4f32_1-MLC', label: 'Hermes 3 (Llama 3.2 3B, f32)', vram: 2952, f32: true, note: 'In-character roleplay without f16 shaders — the safe pick for older GPUs.' },
   { id: 'Qwen2.5-3B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 3B', vram: 2504, note: 'Bilingual, strong at structure and scene detail.' },
   {
     id: 'Qwen3-4B-q4f16_1-MLC',
@@ -50,6 +66,7 @@ const MODEL_CATALOG = [
   },
   { id: 'Phi-4-mini-instruct-q4f16_1-MLC', label: 'Phi 4 mini', vram: 3437, note: 'Careful reasoning; wants a discrete GPU or Apple silicon.' },
   { id: 'Phi-3.5-mini-instruct-q4f16_1-MLC', label: 'Phi 3.5 mini', vram: 3672, note: 'Methodical answers, larger download.' },
+  { id: 'Phi-3.5-mini-instruct-q4f32_1-MLC', label: 'Phi 3.5 mini (f32)', vram: 5483, f32: true, note: 'Phi 3.5 in the f32 shader form; wants a discrete GPU at this size.' },
   { id: 'Mistral-7B-Instruct-v0.3-q4f16_1-MLC', label: 'Mistral 7B', vram: 4573, note: 'More expressive prose; needs ~8 GB free VRAM.' },
   {
     id: 'OpenHermes-2.5-Mistral-7B-q4f16_1-MLC',
@@ -79,7 +96,16 @@ const MODEL_CATALOG = [
     uncensored: true,
     note: 'Uncensored 8B tuned for instruction following and structured output; hold the scene for you.',
   },
+  {
+    id: 'Hermes-2-Pro-Llama-3-8B-q4f32_1-MLC',
+    label: 'Hermes 2 Pro (Llama 3 8B, f32)',
+    vram: 6051,
+    uncensored: true,
+    f32: true,
+    note: 'The uncensored 8B in f32 shaders, for GPUs that cannot compile f16. Needs about 6 GB free.',
+  },
   { id: 'Qwen2.5-7B-Instruct-q4f16_1-MLC', label: 'Qwen2.5 7B', vram: 5106, note: 'Best quality available here if your GPU has the memory.' },
+  { id: 'Qwen2.5-7B-Instruct-q4f32_1-MLC', label: 'Qwen2.5 7B (f32)', vram: 5900, f32: true, note: 'The 7B without f16 shaders; the strongest option here for a GPU that rejects f16.' },
   {
     id: 'Qwen3-8B-q4f16_1-MLC',
     label: 'Qwen3 8B',
@@ -94,6 +120,12 @@ const MODEL_CATALOG = [
     note: 'Richest prose here, but at 6.3 GB it fills an 8 GB card — close other GPU apps and keep scenes short.',
   },
 ];
+
+// Half-precision kernels only compile on GPUs that expose the shader-f16 feature.
+// Elsewhere (older Intel/AMD parts, or drivers that hide it) the shader module is
+// rejected outright, so the catalog carries f32 twins that avoid that path.
+const modelNeedsF16 = (model) => Boolean(model) && !model.f32 && /q4f16_1|q0f16/.test(model.id);
+const f32Fallback = () => MODEL_CATALOG.find((model) => model.f32) || null;
 
 const DEFAULT_SETTINGS = {
   modelId: DEFAULT_MODEL,
@@ -664,7 +696,7 @@ async function detectWebGPU() {
     parts.push(`shader-f16 ${hasF16 ? 'yes' : 'no'}`);
     const maxBuffer = adapter.limits?.maxBufferSize || 0;
     if (maxBuffer) parts.push(`${Math.round(maxBuffer / (1024 * 1024))} MB buffers`);
-    state.webgpu = { ok: true, message: parts.join(' · ') };
+    state.webgpu = { ok: true, hasF16, message: parts.join(' · ') };
   } catch (error) {
     state.webgpu = { ok: false, message: `WebGPU failed to initialise: ${error?.message || error}` };
   }
@@ -679,7 +711,20 @@ function renderGpuState() {
   els.notice.hidden = ok;
   if (!ok) els.notice.textContent = state.webgpu?.message || 'Local models cannot run in this browser.';
   els.loadModel.disabled = !ok;
+  if (ok && state.webgpu.hasF16 === false) ensureCompatibleModel();
   syncControls();
+}
+
+// A GPU without shader-f16 cannot compile the f16 models at all, so quietly move
+// the selection to an f32 twin and rebuild the picker around what this GPU can run.
+function ensureCompatibleModel() {
+  const current = MODEL_CATALOG.find((model) => model.id === state.settings.modelId);
+  if (current && !modelNeedsF16(current)) return;
+  const twin = f32Fallback();
+  if (!twin || twin.id === state.settings.modelId) return;
+  state.settings.modelId = twin.id;
+  saveSettings();
+  buildModelSelect();
 }
 
 async function loadWebLLM() {
@@ -719,7 +764,14 @@ function buildModelSelect() {
       const flags = [model.uncensored ? 'uncensored' : null, model.recommended ? 'recommended' : null]
         .filter(Boolean)
         .join(', ');
-      option.textContent = `${model.label} — ${(model.vram / 1024).toFixed(1)} GB VRAM${flags ? ` (${flags})` : ''}`;
+      const blocked = modelNeedsF16(model) && state.webgpu?.hasF16 === false;
+      option.textContent = `${model.label} — ${(model.vram / 1024).toFixed(1)} GB VRAM${flags ? ` (${flags})` : ''}${
+        blocked ? ' · needs f16' : ''
+      }`;
+      if (blocked) {
+        option.disabled = true;
+        option.title = 'This GPU cannot compile f16 shaders. Pick a model marked f32.';
+      }
       return option;
     })
   );
@@ -732,7 +784,11 @@ function updateModelNote() {
   const warning = model.uncensored
     ? ' Uncensored fine-tune: it will not sanitise a scene for you.'
     : '';
-  els.modelNote.textContent = `${model.note}${warning} About ${(model.vram / 1024).toFixed(1)} GB of GPU memory; the weights stay cached after the first download.`;
+  const blocked = modelNeedsF16(model) && state.webgpu?.hasF16 === false;
+  const extra = blocked
+    ? ' This GPU cannot compile f16 shaders, so this model will not load here — pick one marked f32.'
+    : '';
+  els.modelNote.textContent = `${model.note}${warning}${extra} About ${(model.vram / 1024).toFixed(1)} GB of GPU memory; the weights stay cached after the first download.`;
 }
 
 function syncModelChip() {
@@ -771,6 +827,13 @@ async function ensureEngine() {
   const modelId = els.modelSelect.value || state.settings.modelId;
   if (state.engine && state.engineModel === modelId) return state.engine;
   if (!state.webgpu?.ok) throw new Error(state.webgpu?.message || 'WebGPU is not available in this browser.');
+
+  const chosen = MODEL_CATALOG.find((model) => model.id === modelId);
+  if (modelNeedsF16(chosen) && state.webgpu?.hasF16 === false) {
+    throw new Error(
+      'This GPU cannot compile f16 shaders, so that model would fail while loading. Pick a model marked f32 — Llama 3.2 1B (f32) is the same model in the form this GPU can run.'
+    );
+  }
 
   if (state.engine) {
     try {
@@ -840,7 +903,12 @@ function describeError(error) {
   if (/device.?lost|lost device/i.test(message)) return 'The GPU device was lost. Unload the model and load it again.';
   if (/Failed to fetch|network|net::/i.test(message)) return 'The model download failed. Check your connection and try again — cached parts are reused.';
   if (/not part of this WebLLM build/i.test(message)) return message;
-  if (/shader-f16|feature not supported/i.test(message)) return 'This GPU lacks a feature the model needs. Try a different model.';
+  if (/Invalid ShaderModule|index_kernel|validating compute stage|createShaderModule|ShaderModule/i.test(message)) {
+    return `Your GPU rejected this model's shaders, so it never ran. Pick a model marked f32 (Llama 3.2 1B f32 is the lightest) — those skip the half-precision path this GPU cannot compile. If you were already on an f32 model, clear this site's cached data in DevTools → Application → Storage, then reload and try again. (${message})`;
+  }
+  if (/shader-f16|feature not supported/i.test(message)) {
+    return 'This GPU does not support the f16 feature these weights need. Pick a model marked f32 instead.';
+  }
   return `Generation failed: ${message}`;
 }
 
