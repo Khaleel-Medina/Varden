@@ -198,8 +198,6 @@ let currentImageData = null;
 let currentUser = null;
 let isDemo = true;
 
-let isDemo = true;
-
 const grid = document.querySelector("#characterGrid");
 const resultCount = document.querySelector("#resultCount");
 const searchInput = document.querySelector("#searchInput");
