@@ -393,24 +393,54 @@ async function saveEditor() {
 
 /* ---------------- import / export ---------------- */
 
+// Same name from the same creator means the same card; a re-import should not
+// leave two identical entries in the library.
+function cardKey(character) {
+  const name = String(character?.name || '').trim().toLowerCase();
+  const creator = String(character?.creator || '').trim().toLowerCase();
+  return `${name}|${creator}`;
+}
+
 async function importFiles(files) {
   const list = [...files].filter(Boolean);
   if (!list.length) return;
+
+  const existing = new Map((await listCharacters()).map((card) => [cardKey(card), card.name]));
   let imported = 0;
+  const duplicates = [];
   const failures = [];
+
   for (const file of list) {
     try {
       const { character } = await parseCardFile(file);
+      const key = cardKey(character);
+      if (existing.has(key)) {
+        duplicates.push(existing.get(key));
+        continue;
+      }
       const saved = await saveCharacter({ ...character, id: uid(), createdAt: Date.now() });
+      existing.set(key, saved.name);
       imported += 1;
       toast(`${saved.name} imported.`);
     } catch (error) {
-      failures.push(`${file.name}: ${error?.message || error}`);
+      failures.push(error?.message || String(error));
     }
   }
+
   await refresh();
-  if (failures.length) toast(failures[0], 'bad');
-  else if (imported > 1) toast(`${imported} cards imported.`);
+
+  const parts = [];
+  if (imported) parts.push(`${imported} imported`);
+  if (duplicates.length) parts.push(`${duplicates.length} already in your library`);
+  if (failures.length) parts.push(`${failures.length} failed`);
+
+  if (failures.length) {
+    toast(imported || duplicates.length ? `${failures[0]} (${parts.join(', ')})` : failures[0], 'bad');
+  } else if (duplicates.length) {
+    toast(`${duplicates[0]} is already in your library.`, 'bad');
+  } else if (imported > 1) {
+    toast(parts.join(', '));
+  }
 }
 
 async function exportAs(character, format) {

@@ -8,7 +8,7 @@ export const DB_NAME = 'varden-tavern';
 export const DB_VERSION = 2;
 export const STORES = ['characters', 'personas', 'chats', 'meta', 'memories'];
 // Bump when new seed cards are added so existing libraries pick them up.
-export const SEED_VERSION = 2;
+export const SEED_VERSION = 3;
 
 export const DEFAULT_SYSTEM_PROMPT = [
   'You are the character described below in an ongoing roleplay with the user.',
@@ -395,6 +395,36 @@ const SEED_CARDS = [
       },
     ],
   },
+  {
+    id: 'inessa-hollow',
+    name: 'Inessa Hollow',
+    tagline: 'She kept the ledger of the dead. Now she sells entries back.',
+    creator: 'Varden',
+    description:
+      'Keeper of the charnel house at Hollowmere since the blight took the last sexton. She catalogued every body that came through and noticed the plague obeyed rules — patterns in who it took, when, and what was left behind. She wrote the patterns down. Then she began trading in them.',
+    personality:
+      'Unhurried and scrupulously fair, which is worse than cruel. She never lies outright and never volunteers the part that would change your mind. Treats a bargain as sacred and a promise as a debt with interest. Kind to the dying, indifferent to the saved.',
+    scenario:
+      'Dusk at the charnel house. The bell has rung once for the day shift and will not ring again until morning. You have come to buy back a name from the ledger.',
+    firstMessage:
+      'Inessa sets the ledger on the table but does not open it. The tallow candle has burned long enough to hollow itself out.\n\n"The name you want is on the fourth page. It has been paid for once already, which makes this a second sale, which makes it expensive." She folds her hands. "I will tell you the price before you agree. I will not tell you why it costs what it costs. That is the whole of my honesty, and it is more than most people get."',
+    exampleDialogue:
+      '{{user}}: And if I refuse?\n{{char}}: "Then the entry stays as it is, and the person stays as they are." She turns the page without looking at it. "I am not a monster. Monsters take. I invoice."\n{{user}}: You let them die.\n{{char}}: "I let them choose. There is a difference, and you will notice it more the longer you live near me."',
+    tags: ['dark fantasy', 'plague', 'bargain', 'morally grey'],
+    accent: ['#8f1d33', '#0d0a10', '#c9a227'],
+    lorebook: [
+      {
+        keys: ['hollowmere', 'charnel house', 'blight', 'the bell'],
+        content:
+          'Hollowmere lost four hundred people to the grey blight in a single winter. The charnel house stands outside the wall because the priest would not allow the dead inside it. Its bell rings twice a day: once at dawn for the living, once at dusk for the rest.',
+      },
+      {
+        keys: ['ledger', 'entry', 'name', 'price'],
+        content:
+          'The ledger records every death at Hollowmere — name, day, what the body left behind, and who paid. An entry can be bought, which does not undo the death; it changes what the village remembers of it. Inessa sets the price herself and has never been known to haggle, lie about it, or explain it.',
+      },
+    ],
+  },
 ];
 
 export function seedCards() {
@@ -696,20 +726,68 @@ function readPngTextChunks(buffer) {
   return chunks;
 }
 
+// Card art is a photo-sized PNG, JSON is text. Anything far beyond these is a
+// mistake (a video, a folder drag) rather than a card, and reading it would just
+// stall the tab.
+const MAX_CARD_BYTES = 8 * 1024 * 1024;
+const MAX_JSON_BYTES = 2 * 1024 * 1024;
+
+function readCardJson(text, label) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${label} is not valid JSON (${error.message}).`);
+  }
+  try {
+    return fromCardJson(parsed);
+  } catch (error) {
+    throw new Error(`${label}: ${error.message}`);
+  }
+}
+
 export async function parseCardFile(file) {
-  const name = (file.name || '').toLowerCase();
-  if (name.endsWith('.json')) {
-    const text = await file.text();
-    return { character: fromCardJson(JSON.parse(text)), avatar: null };
+  if (!file) throw new Error('No file was selected.');
+  const label = file.name || 'That file';
+  const name = label.toLowerCase();
+  const isJson = name.endsWith('.json');
+  const isPng = name.endsWith('.png');
+
+  if (!isJson && !isPng) {
+    throw new Error(`${label} is not a card. Import a Tavern PNG card or a .json file.`);
+  }
+  if (!file.size) throw new Error(`${label} is empty.`);
+
+  const limit = isJson ? MAX_JSON_BYTES : MAX_CARD_BYTES;
+  if (file.size > limit) {
+    const size = (file.size / 1048576).toFixed(1);
+    throw new Error(`${label} is ${size} MB; cards are limited to ${limit / 1048576} MB.`);
+  }
+
+  if (isJson) {
+    return { character: readCardJson(await file.text(), label), avatar: null };
   }
 
   const buffer = await file.arrayBuffer();
-  const chunks = readPngTextChunks(buffer);
+  let chunks;
+  try {
+    chunks = readPngTextChunks(buffer);
+  } catch {
+    throw new Error(`${label} is not a real PNG — it may be renamed or half-downloaded.`);
+  }
   const payload = chunks.chara || chunks.ccv3 || chunks.Chara;
   if (!payload) {
-    throw new Error('That PNG has no card data embedded. Export it as a character card, or import a JSON file.');
+    throw new Error(`${label} has no card data inside it. Export it as a PNG character card, or import a .json file.`);
   }
-  const character = fromCardJson(JSON.parse(base64ToUtf8(payload)));
+
+  let text;
+  try {
+    text = base64ToUtf8(payload);
+  } catch {
+    throw new Error(`The card data inside ${label} is corrupt and could not be decoded.`);
+  }
+
+  const character = readCardJson(text, label);
   // Store the incoming PNG as card art; object URLs do not survive a reload.
   character.avatar = await fileToDataUrl(file);
   return { character, avatar: character.avatar };

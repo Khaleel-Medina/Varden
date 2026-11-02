@@ -1859,6 +1859,52 @@ button:disabled,
   }
 }
 
+/* ---------- Landing banner ---------- */
+.start-flag {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 34px;
+  align-items: center;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.flag-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  border-radius: 12px;
+}
+
+.flag-copy h2 {
+  margin: 6px 0 10px;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.flag-copy p {
+  margin: 0 0 14px;
+  color: var(--soft);
+  line-height: 1.65;
+}
+
+@media (max-width: 720px) {
+  .start-flag {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 18px;
+  }
+
+  .flag-art {
+    max-width: 210px;
+    margin: 0 auto;
+  }
+}
+
 /* ---------- Long-term memory (CAM) ---------- */
 .memory-list {
   list-style: none;
