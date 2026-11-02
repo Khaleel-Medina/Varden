@@ -15,7 +15,7 @@ import { buildCardPng, parseCardFile } from './cards.js';
 // actual gating (public read, owner-only write).
 const SUPABASE_URL = 'https://ljruzruhbqkbxkflrvzi.supabase.co';
 const SUPABASE_ANON =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqcnV6cnVoYmtiY3hrbGZydnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4MzQ0NjMsImV4cCI6MjA4NDQxMDQ2M30.ZlJcgo3KzQ9ND9VSEpH0yzHyeZFHid';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqcnV6cnVoYnFrYnhrZmxydnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNzExOTIsImV4cCI6MjA5NzY0NzE5Mn0.3nMbB6tYCF9-GZUs3Gu76Z-yVYCQrWOnM3EBcSTZlWg';
 
 const BUCKET = 'cards';
 
