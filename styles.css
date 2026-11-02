@@ -1905,6 +1905,105 @@ button:disabled,
   }
 }
 
+/* ---------- Shared cards ---------- */
+.lib-shared {
+  display: grid;
+  gap: 16px;
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.lib-shared-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.lib-shared-head h2 {
+  margin: 4px 0 6px;
+  font-size: 1.35rem;
+}
+
+.lib-shared-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.shared-card {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.shared-card-art {
+  width: 76px;
+  height: 76px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6d5dfc, #10131d 58%, #3ad6c6);
+}
+
+.shared-card-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.shared-card-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.shared-card-body strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-card-by {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.shared-card-body p {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.shared-card-body .solid-button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 560px) {
+  .lib-shared-head {
+    display: grid;
+    gap: 10px;
+  }
+
+  .lib-shared-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Long-term memory (CAM) ---------- */
 .memory-list {
   list-style: none;

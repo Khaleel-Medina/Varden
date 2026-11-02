@@ -18,6 +18,7 @@ import {
   saveCharacter,
   uid,
 } from './cards.js';
+import { fetchSharedCard, getSharedUser, listSharedCards, shareCard } from './shared.js';
 
 const state = {
   characters: [],
@@ -28,6 +29,7 @@ const state = {
   editingId: null,
   avatar: null,
   lore: [],
+  shared: { cards: [], error: null, user: null, loading: false },
 };
 
 const els = {
@@ -65,6 +67,9 @@ const els = {
   addLore: document.getElementById('addLoreBtn'),
   toast: document.getElementById('toast'),
   dropHint: document.getElementById('dropHint'),
+  sharedGrid: document.getElementById('sharedGrid'),
+  sharedNote: document.getElementById('sharedNote'),
+  refreshShared: document.getElementById('refreshShared'),
 };
 
 function toast(message, tone = 'ok') {
@@ -191,7 +196,14 @@ function buildCard(character) {
   more.setAttribute('aria-label', `More actions for ${character.name}`);
   more.textContent = '⋯';
 
-  actions.append(play, edit, more);
+  const share = document.createElement('button');
+  share.type = 'button';
+  share.className = 'ghost-button';
+  share.dataset.share = character.id;
+  share.textContent = 'Share';
+  share.title = 'Publish this card as a PNG anyone can download';
+
+  actions.append(play, edit, share, more);
   body.append(heading, tagline, tags, meta, actions);
   card.append(art, body);
   return card;
@@ -647,11 +659,129 @@ function bindEvents() {
   });
 }
 
+/* ---------------- shared cards ---------------- */
+
+function sharedCardRow(card) {
+  const article = document.createElement('article');
+  article.className = 'shared-card';
+
+  const art = document.createElement('div');
+  art.className = 'shared-card-art';
+  setAccent(art, ['#6d5dfc', '#10131d', '#3ad6c6']);
+  if (card.card_url) {
+    const image = document.createElement('img');
+    image.src = card.card_url;
+    image.alt = `${card.name} card art`;
+    image.loading = 'lazy';
+    art.append(image);
+  }
+
+  const body = document.createElement('div');
+  body.className = 'shared-card-body';
+
+  const title = document.createElement('strong');
+  title.textContent = card.name || 'Untitled card';
+  const by = document.createElement('span');
+  by.className = 'shared-card-by';
+  by.textContent = `by ${card.creator || 'unknown'}`;
+  const tagline = document.createElement('p');
+  tagline.textContent = card.tagline || '';
+
+  const download = document.createElement('button');
+  download.type = 'button';
+  download.className = 'solid-button';
+  download.dataset.pull = card.id;
+  download.textContent = 'Download';
+  download.title = 'Save the PNG card and add this character to your library';
+
+  body.append(title, by, tagline, download);
+  article.append(art, body);
+  return article;
+}
+
+function renderShared() {
+  if (!els.sharedGrid) return;
+  els.sharedGrid.replaceChildren();
+  const { cards, error, loading } = state.shared;
+
+  if (loading) {
+    els.sharedNote.textContent = 'Loading shared cards…';
+    return;
+  }
+  if (error) {
+    els.sharedNote.textContent = error;
+    return;
+  }
+  if (!cards.length) {
+    els.sharedNote.textContent =
+      'No shared cards yet. Publishing one of yours puts a PNG here that anyone can download.';
+    return;
+  }
+
+  els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library.`;
+  els.sharedGrid.append(...cards.map(sharedCardRow));
+}
+
+async function loadShared() {
+  state.shared = { ...state.shared, loading: true };
+  renderShared();
+  const [listing, user] = await Promise.all([listSharedCards(), getSharedUser()]);
+  state.shared = { cards: listing.cards, error: listing.error, user, loading: false };
+  renderShared();
+  return state.shared;
+}
+
+async function shareToLibrary(character) {
+  toast(`Publishing ${character.name}…`);
+  try {
+    await shareCard(character);
+    toast(`${character.name} published. Anyone can download it now.`);
+    await loadShared();
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+async function pullSharedCard(id) {
+  const card = state.shared.cards.find((item) => item.id === id);
+  if (!card) return;
+  try {
+    const { character, blob, filename } = await fetchSharedCard(card);
+    const existing = (await listCharacters()).find((entry) => cardKey(entry) === cardKey(character));
+    if (existing) {
+      toast(`${existing.name} is already in your library; saved the PNG anyway.`, 'bad');
+    } else {
+      await saveCharacter({ ...character, id: uid(), createdAt: Date.now() });
+      await refresh();
+      toast(`${character.name} added to your library.`);
+    }
+    downloadBlob(blob, filename);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+function initShared() {
+  els.refreshShared?.addEventListener('click', () => loadShared());
+  document.addEventListener('click', (event) => {
+    const shareButton = event.target.closest?.('[data-share]');
+    if (shareButton) {
+      const character = state.characters.find((item) => item.id === shareButton.dataset.share);
+      if (character) shareToLibrary(character);
+      return;
+    }
+    const pullButton = event.target.closest?.('[data-pull]');
+    if (pullButton) pullSharedCard(pullButton.dataset.pull);
+  });
+  loadShared();
+}
+
 async function init() {
   bindEvents();
   await ensureSeeded();
   await migrateLegacyChats();
   await refresh();
+  initShared();
 }
 
 init().catch((error) => {

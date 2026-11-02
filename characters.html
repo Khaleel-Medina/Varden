@@ -76,6 +76,18 @@
       <section class="lib-grid" id="characterGrid" aria-live="polite"></section>
 
       <p class="lib-drop-hint" id="dropHint">Drop PNG or JSON character cards anywhere on this page to import them.</p>
+
+      <section class="lib-shared" aria-labelledby="sharedHeading">
+        <div class="lib-shared-head">
+          <div>
+            <p class="eyebrow">Community</p>
+            <h2 id="sharedHeading">Shared cards</h2>
+            <p class="field-note" id="sharedNote">Loading shared cards…</p>
+          </div>
+          <button class="ghost-button" id="refreshShared" type="button">Refresh</button>
+        </div>
+        <div class="lib-shared-grid" id="sharedGrid"></div>
+      </section>
     </main>
 
     <dialog class="creator-dialog lib-dialog" id="editorDialog">
