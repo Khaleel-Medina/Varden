@@ -1,6 +1,9 @@
 // Varden — main app (Supabase auth + DB, Vercel Blob images, IndexedDB cache)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCharacter, normalizeCharacter, saveCharacter } from './cards.js';
+// Only the provider list is used; shared.js creates its client lazily, so importing
+// it here does not open a second auth client on this page.
+import { OAUTH_PROVIDERS } from './shared.js';
 
 // IndexedDB cache (inlined to avoid MIME type issues with local .js imports)
 const CACHE_DB = 'varden-cache';
@@ -195,8 +198,7 @@ let currentImageData = null;
 let currentUser = null;
 let isDemo = true;
 
-// Cache: IndexedDB fallback
-let dbReady = openDB();
+let isDemo = true;
 
 const grid = document.querySelector("#characterGrid");
 const resultCount = document.querySelector("#resultCount");
@@ -231,6 +233,68 @@ const authToggle = document.getElementById('authToggle');
 const authCancel = document.getElementById('authCancel');
 let authMode = 'signin';
 
+const authOauth = document.getElementById('authOauth');
+const authError = document.getElementById('authError');
+
+function showAuthError(message) {
+  if (!authError) return;
+  authError.textContent = message || '';
+  authError.hidden = !message;
+}
+
+function explainAuthError(error) {
+  const message = String(error?.message || error || 'Something went wrong.');
+  if (/Invalid login credentials/i.test(message)) return 'That email and password do not match an account.';
+  if (/Email not confirmed/i.test(message)) return 'Confirm your email address first, then sign in.';
+  if (/already registered/i.test(message)) return 'That email already has an account — sign in instead.';
+  if (/provider is not enabled|Unsupported provider/i.test(message)) {
+    return 'That provider is not enabled yet — turn it on in Supabase → Authentication → Providers.';
+  }
+  if (/redirect_uri_mismatch|redirect/i.test(message)) {
+    return `This page is not an allowed redirect. Add ${location.origin}${location.pathname} in Supabase → Authentication → URL Configuration.`;
+  }
+  if (/rate limit|too many/i.test(message)) return 'Too many attempts — wait a minute and try again.';
+  if (/Failed to fetch|NetworkError/i.test(message)) return 'Could not reach the sign-in service — check the connection.';
+  return message;
+}
+
+function buildAuthProviders() {
+  if (!authOauth || authOauth.childElementCount) return;
+  authOauth.append(
+    ...OAUTH_PROVIDERS.map((provider) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'oauth-button';
+      button.dataset.provider = provider.id;
+
+      const badge = document.createElement('span');
+      badge.className = 'oauth-badge';
+      badge.setAttribute('aria-hidden', 'true');
+      badge.textContent = provider.label.slice(0, 1);
+
+      const label = document.createElement('span');
+      label.textContent = `Continue with ${provider.label}`;
+
+      button.append(badge, label);
+      return button;
+    })
+  );
+}
+
+async function startProviderSignIn(provider) {
+  if (!provider) return;
+  showAuthError('');
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${location.origin}${location.pathname}` },
+    });
+    if (error) throw error;
+  } catch (error) {
+    showAuthError(explainAuthError(error));
+  }
+}
+
 function updateAuthUI(user) {
   currentUser = user;
   isDemo = !user;
@@ -263,19 +327,21 @@ function updateAuthUI(user) {
 }
 
 async function handleSignIn(email, password) {
+  showAuthError('');
   try {
     await signIn(email, password);
   } catch (e) {
-    alert(e.message || 'Sign in failed');
+    showAuthError(explainAuthError(e));
   }
 }
 
 async function handleSignUp(email, password, displayName) {
+  showAuthError('');
   try {
     await signUp(email, password, displayName);
-    alert('Check your email to confirm your account');
+    alert('Account created — check your email to confirm it, then sign in.');
   } catch (e) {
-    alert(e.message || 'Sign up failed');
+    showAuthError(explainAuthError(e));
   }
 }
 
@@ -310,6 +376,25 @@ authToggle?.addEventListener('click', (e) => {
 });
 
 authCancel?.addEventListener('click', () => authDialog?.close());
+
+authOauth?.addEventListener('click', (event) => {
+  const button = event.target.closest?.('[data-provider]');
+  if (button) startProviderSignIn(button.dataset.provider);
+});
+
+buildAuthProviders();
+
+// A provider can send a refusal back on the query string or the hash; report it in
+// the dialog instead of leaving the page looking signed out for no reason.
+const initialQuery = new URLSearchParams(location.search);
+const initialFragment = new URLSearchParams(location.hash.replace(/^#/, ''));
+const returnedError = initialQuery.get('error') || initialFragment.get('error');
+if (returnedError) {
+  const description = (initialQuery.get('error_description') || initialFragment.get('error_description') || '').replace(/\+/g, ' ');
+  showAuthError(explainAuthError({ message: `${returnedError} ${description}` }));
+  authDialog?.showModal();
+  history.replaceState(null, '', location.pathname);
+}
 
 function setArt(element, art) {
   element.style.setProperty("--art-a", art[0]);

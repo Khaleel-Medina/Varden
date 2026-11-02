@@ -198,6 +198,8 @@
           </div>
           <button class="icon-button" value="cancel" aria-label="Close" type="submit">x</button>
         </div>
+        <div class="oauth-row" id="authOauth" aria-label="Continue with an account"></div>
+        <p class="oauth-divider" id="authDivider"><span>or use email</span></p>
         <div class="form-grid">
           <label>
             Email
@@ -208,6 +210,7 @@
             <input id="authPassword" type="password" required minlength="6" placeholder="Min 6 characters" />
           </label>
         </div>
+        <p class="form-error" id="authError" hidden></p>
         <div class="dialog-actions">
           <button class="ghost-button" value="cancel" type="button" id="authCancel">Cancel</button>
           <button class="solid-button" value="default" type="button" id="authSubmit">Sign in</button>
