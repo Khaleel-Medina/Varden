@@ -1,5 +1,6 @@
 // Varden — main app (Supabase auth + DB, Vercel Blob images, IndexedDB cache)
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getCharacter, normalizeCharacter, saveCharacter } from './cards.js';
 
 // IndexedDB cache (inlined to avoid MIME type issues with local .js imports)
 const CACHE_DB = 'varden-cache';
@@ -445,14 +446,91 @@ async function renderGrid() {
           <span>❤️ ${formatNumber(character.likes || 0)}</span>
           <span>🔖 ${formatNumber(character.bookmarks || 0)}</span>
         </div>
+        <a class="card-chat" href="./chat.html?character=${encodeURIComponent(character.id || character.slug || "")}">Chat on this device</a>
       </div>
     `;
     grid.appendChild(card);
   }
 }
 
+function showDetail(character) {
+  const art = character.art || (character.art_a ? [character.art_a, character.art_b, character.art_c] : ["#6d5dfc", "#141827", "#3ad6c6"]);
+  detail.art.style.setProperty("--art-a", art[0]);
+  detail.art.style.setProperty("--art-b", art[1]);
+  detail.art.style.setProperty("--art-c", art[2]);
+  detail.art.innerHTML = character.art_url
+    ? `<img src="${character.art_url}" alt="${character.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;" />`
+    : "";
+  detail.visibility.textContent = character.visibility || "public";
+  detail.source.textContent = character.source || "Original";
+  detail.name.textContent = character.name || "Untitled";
+  detail.tagline.textContent = character.tagline || "";
+  detail.likes.textContent = formatNumber(character.likes || 0);
+  detail.bookmarks.textContent = formatNumber(character.bookmarks || 0);
+  detail.rating.textContent = character.rating || "—";
+  detail.greeting.textContent = character.greeting || "No greeting saved yet.";
+  detail.personality.textContent = character.personality || "No personality notes yet.";
+  detail.tags.replaceChildren(
+    ...(character.tags || []).map((tag) => {
+      const pill = document.createElement("span");
+      pill.textContent = tag;
+      return pill;
+    })
+  );
+  const chatLink = document.querySelector("#detailChat");
+  const characterId = character.id || character.slug;
+  if (chatLink && characterId) {
+    chatLink.href = `./chat.html?character=${encodeURIComponent(characterId)}`;
+    chatLink.dataset.characterId = characterId;
+  }
+}
+
+// Catalog characters live in Supabase (or the demo seeds). Chat runs from the
+// local library, so copy the card across before opening it there.
+async function chatWith(character) {
+  const id = character.id || character.slug;
+  if (!id) return;
+  try {
+    if (!(await getCharacter(id))) {
+      await saveCharacter(
+        normalizeCharacter({
+          id,
+          name: character.name,
+          tagline: character.tagline,
+          creator: character.creator,
+          description: [character.tagline, character.greeting].filter(Boolean).join("\n\n"),
+          personality: character.personality,
+          firstMessage: character.greeting,
+          tags: character.tags || [],
+          avatar: character.art_url || null,
+          accent: [character.art_a, character.art_b, character.art_c],
+        })
+      );
+    }
+  } catch (error) {
+    console.warn('Varden: could not copy the character into the local library', error);
+  }
+  window.location.href = `./chat.html?character=${encodeURIComponent(id)}`;
+}
+
+const detailChatLink = document.querySelector("#detailChat");
+detailChatLink?.addEventListener("click", (event) => {
+  const character = characters.find((item) => (item.id || item.slug) === detailChatLink.dataset.characterId);
+  if (!character) return;
+  event.preventDefault();
+  chatWith(character);
+});
+
 grid.addEventListener("click", (event) => {
   const card = event.target.closest(".character-card");
+  if (event.target.closest(".card-chat")) {
+    const target = card && characters.find((item) => (item.id || item.slug) === card.dataset.id);
+    if (target) {
+      event.preventDefault();
+      chatWith(target);
+    }
+    return;
+  }
   if (!card) return;
   selectedId = card.dataset.id;
   renderGrid();

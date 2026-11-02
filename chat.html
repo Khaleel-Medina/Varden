@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Roleplay with AI character cards. Models run locally on your GPU through WebGPU — no accounts, no message limits, nothing sent to a server." />
+    <title>Chat | Varden</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+  </head>
+  <body class="chat-body">
+    <div class="chat-shell">
+      <aside class="chat-rail" aria-label="Characters and chats">
+        <a class="brand start-brand" href="./index.html">
+          <img class="brand-mark" src="./assets/varden-mark.svg" alt="" width="42" height="42" />
+          <div>
+            <strong>Varden</strong>
+            <span>Local Tavern</span>
+          </div>
+        </a>
+
+        <nav class="nav-list chat-nav" aria-label="Sections">
+          <a class="nav-item nav-link active" href="./chat.html">Chat</a>
+          <a class="nav-item nav-link" href="./characters.html">Library</a>
+          <a class="nav-item nav-link" href="./get-started.html">Get Started</a>
+        </nav>
+
+        <section class="rail-section">
+          <div class="rail-heading">
+            <p class="section-kicker">Characters</p>
+            <a class="rail-link" href="./characters.html">Manage</a>
+          </div>
+          <div class="character-list" id="characterList"></div>
+        </section>
+
+        <section class="rail-section">
+          <div class="rail-heading">
+            <p class="section-kicker">Chats</p>
+            <button class="rail-link" id="newChatBtn" type="button">+ New chat</button>
+          </div>
+          <div class="conversation-list" id="chatList"></div>
+        </section>
+
+        <div class="rail-footer">
+          <div class="engine-pill" id="enginePill">
+            <span class="status-dot" id="gpuDot"></span>
+            <span id="gpuBadge">Checking GPU…</span>
+          </div>
+          <p class="rail-note" id="gpuDetail">WebGPU turns this browser into the inference runtime.</p>
+        </div>
+      </aside>
+
+      <main class="chat-main">
+        <header class="chat-topbar">
+          <div class="persona-head">
+            <div class="persona-art" id="characterAvatar" aria-hidden="true"></div>
+            <div>
+              <p class="eyebrow" id="characterSource">Local character</p>
+              <h1 id="characterName">Varden Assistant</h1>
+              <span id="characterTagline">No character selected</span>
+            </div>
+          </div>
+          <div class="chat-actions">
+            <span class="model-chip" id="modelChip">Model not loaded</span>
+            <button class="ghost-button" id="exportChatBtn" type="button">Export</button>
+          </div>
+        </header>
+
+        <p class="chat-notice" id="notice" hidden></p>
+
+        <section class="thread" id="thread" aria-live="polite" aria-label="Conversation"></section>
+
+        <div class="gen-status" id="genStatus" hidden>
+          <div class="gen-bar"><span id="genBar"></span></div>
+          <p id="genText">Working…</p>
+        </div>
+
+        <form class="composer" id="composer" autocomplete="off">
+          <textarea id="promptInput" rows="1" placeholder="Write your reply…" aria-label="Message"></textarea>
+          <div class="composer-row">
+            <span class="composer-hint">Enter sends · Shift + Enter adds a line · runs on your GPU</span>
+            <div class="composer-actions">
+              <button class="ghost-button" id="stopBtn" type="button" hidden>Stop</button>
+              <button class="ghost-button" id="continueBtn" type="button" title="Let the character keep talking">Continue</button>
+              <button class="solid-button" id="sendBtn" type="submit">Send</button>
+            </div>
+          </div>
+        </form>
+      </main>
+
+      <aside class="chat-panel" aria-label="Model, persona and card settings">
+        <section class="panel-block">
+          <p class="eyebrow">Model</p>
+          <label class="field">
+            Choose a model
+            <select id="modelSelect"></select>
+          </label>
+          <p class="field-note" id="modelNote"></p>
+          <div class="panel-actions">
+            <button class="solid-button" id="loadModelBtn" type="button">Load model</button>
+            <button class="ghost-button" id="unloadModelBtn" type="button" disabled>Unload</button>
+          </div>
+          <div class="load-meter" id="loadMeter" hidden><span></span></div>
+          <p class="load-text" id="loadText"></p>
+        </section>
+
+        <section class="panel-block">
+          <p class="eyebrow">You in this scene</p>
+          <label class="field">
+            Persona
+            <select id="personaSelect"></select>
+          </label>
+          <button class="link-button" id="editPersonaBtn" type="button">Edit persona</button>
+          <label class="field">
+            Author's note <span class="field-hint">sent with every reply</span>
+            <textarea id="authorNote" rows="3" placeholder="Keep the tone tense. She is hiding the letter."></textarea>
+          </label>
+        </section>
+
+        <section class="panel-block">
+          <p class="eyebrow">Character card</p>
+          <p class="field-note" id="characterMeta">No card loaded.</p>
+          <a class="link-button" id="editCardLink" href="./characters.html">Open in library</a>
+        </section>
+
+        <section class="panel-block">
+          <p class="eyebrow">Long-term memory</p>
+          <p class="field-note" id="memoryNote">Facts are picked up as the scene goes on and fed back when the chat gets long.</p>
+          <ul class="memory-list" id="memoryList"></ul>
+          <button class="link-button" id="clearMemoryBtn" type="button">Forget everything remembered</button>
+        </section>
+
+        <section class="panel-block">
+          <p class="eyebrow">Sampling</p>
+          <label class="field slider-field">
+            <span>Temperature <output id="tempOut">0.85</output></span>
+            <input id="temperature" type="range" min="0" max="2" step="0.05" value="0.85" />
+          </label>
+          <label class="field slider-field">
+            <span>Top P <output id="topPOut">0.95</output></span>
+            <input id="topP" type="range" min="0.05" max="1" step="0.05" value="0.95" />
+          </label>
+          <label class="field slider-field">
+            <span>Max reply tokens <output id="maxOut">384</output></span>
+            <input id="maxTokens" type="range" min="64" max="2048" step="32" value="384" />
+          </label>
+        </section>
+
+        <p class="panel-foot">
+          Models, cards and chats live in this browser. Nothing is uploaded, and there is no message cap.
+        </p>
+      </aside>
+    </div>
+
+    <dialog class="creator-dialog" id="personaDialog">
+      <form class="creator-form" id="personaForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Your persona</p>
+            <h2>Describe who you are in the scene</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="personaClose" aria-label="Close">x</button>
+        </div>
+        <label>
+          Name
+          <input id="personaNameInput" maxlength="40" placeholder="You" />
+        </label>
+        <label>
+          Description
+          <textarea id="personaDescription" rows="5" placeholder="Who you are, what you look like, what you want. Sent to the model as your persona."></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="button" id="personaCancel">Cancel</button>
+          <button class="ghost-button" value="new" type="button" id="personaSaveNew">Save as new</button>
+          <button class="solid-button" value="default" type="submit" id="personaSave">Save persona</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./chat.js"></script>
+  </body>
+</html>

@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Varden</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   </head>
   <body>
     <div class="shell">
       <aside class="rail">
         <div class="brand">
-            <span class="brand-mark">V</span>
+            <img class="brand-mark" src="./assets/varden-mark.svg" alt="" width="42" height="42" />
           <div>
             <strong>Varden</strong>
             <span>Character Vault</span>
@@ -24,7 +26,9 @@
 
         <nav class="nav-list" aria-label="Library sections">
           <a class="nav-item nav-link" href="./get-started.html">Get Started</a>
-          <button class="nav-item active" type="button">Library</button>
+          <a class="nav-item nav-link" href="./chat.html">Chat</a>
+          <a class="nav-item nav-link" href="./characters.html">Library</a>
+          <button class="nav-item active" type="button">Catalog</button>
           <button class="nav-item" type="button">My Characters</button>
           <button class="nav-item" type="button">Drafts</button>
           <button class="nav-item" type="button">Bookmarks</button>
@@ -40,9 +44,9 @@
             <span>Moderation</span>
             <strong>Basic</strong>
           </div>
-          <div class="meter-row muted">
+          <div class="meter-row">
             <span>Chat</span>
-            <strong>Later</strong>
+            <strong>Local · WebGPU</strong>
           </div>
         </section>
 
@@ -63,6 +67,8 @@
             <h1>Varden</h1>
           </div>
           <div class="topbar-actions">
+            <a class="ghost-link" href="./chat.html">Local chat</a>
+            <a class="ghost-link" href="./characters.html">Library</a>
             <a class="ghost-link" href="./get-started.html">Get Started</a>
             <button class="ghost-button" type="button" id="toggleReview">Review queue</button>
             <button class="solid-button" type="button" id="openCreateTop">Create</button>
@@ -132,7 +138,7 @@
               <div class="tag-list" id="detailTags"></div>
               <div class="detail-actions">
                 <button class="solid-button" type="button">View profile</button>
-                <button class="ghost-button" type="button">Chat coming soon</button>
+                <a class="ghost-link" id="detailChat" href="./chat.html">Chat on this device</a>
               </div>
             </div>
           </aside>

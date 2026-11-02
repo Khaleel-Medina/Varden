@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 640" width="512" height="640" role="img" aria-label="Varden banner: a white dragon with spread wings coiled around a downward-pointing sword, a red rose in its claw, on a purple field">
+  <defs>
+    <radialGradient id="field" cx="50%" cy="34%" r="78%">
+      <stop offset="0%" stop-color="#7d3089" />
+      <stop offset="54%" stop-color="#5b2166" />
+      <stop offset="100%" stop-color="#381240" />
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#cdc6da" />
+      <stop offset="42%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#dbd4e6" />
+    </linearGradient>
+
+    <g id="wing">
+      <path d="M236 288
+               C216 228 186 150 150 86
+               C136 102 120 126 108 154
+               Q132 160 140 178
+               C132 190 124 200 118 208
+               Q140 210 152 226
+               C150 232 150 240 150 246
+               C182 258 214 272 236 288 Z" fill="#f7f3ed" />
+      <path d="M230 280 C210 222 188 158 156 98" fill="none" stroke="#ded6e6" stroke-width="3.2" stroke-linecap="round" />
+      <path d="M224 268 C186 222 154 186 120 158" fill="none" stroke="#ded6e6" stroke-width="2.6" stroke-linecap="round" />
+    </g>
+  </defs>
+
+  <rect width="512" height="640" fill="url(#field)" />
+
+  <use href="#wing" />
+  <use href="#wing" transform="translate(512 0) scale(-1 1)" />
+
+  <!-- far hind leg and rear coil, behind the blade -->
+  <path d="M268 396 C282 410 292 424 296 436" fill="none" stroke="#5b2166" stroke-width="16" stroke-linecap="round" />
+  <path d="M268 396 C282 410 292 424 296 436" fill="none" stroke="#e6dfee" stroke-width="12" stroke-linecap="round" />
+  <path d="M296 436 C304 444 310 452 308 460 M300 440 C308 448 316 452 322 452" fill="none" stroke="#5b2166" stroke-width="10" stroke-linecap="round" />
+  <path d="M296 436 C304 444 310 452 308 460 M300 440 C308 448 316 452 322 452" fill="none" stroke="#e6dfee" stroke-width="6" stroke-linecap="round" />
+  <path d="M236 348 C304 356 306 406 242 418" fill="none" stroke="#5b2166" stroke-width="20" stroke-linecap="round" />
+  <path d="M236 348 C304 356 306 406 242 418" fill="none" stroke="#e2dbea" stroke-width="16" stroke-linecap="round" />
+
+  <!-- sword, point down -->
+  <path d="M192 208 C228 226 284 226 320 208 L320 222 C284 242 228 242 192 222 Z" fill="url(#steel)" />
+  <rect x="249" y="168" width="14" height="42" rx="5" fill="#e7e1ee" />
+  <path d="M249 178 H263 M249 188 H263 M249 198 H263" stroke="#bdb4c9" stroke-width="2" />
+  <circle cx="256" cy="158" r="9" fill="#f7f3ed" />
+  <path d="M251 232 H261 L259 592 L256 622 L253 592 Z" fill="url(#steel)" />
+  <path d="M256 246 V584" stroke="#c7bfd4" stroke-width="1.6" />
+
+  <!-- dorsal spines, bases buried in the body -->
+  <path d="M292 366 L330 344 L306 380 Z" fill="#f7f3ed" />
+  <path d="M300 392 L338 382 L306 408 Z" fill="#f7f3ed" />
+  <path d="M282 430 L320 432 L286 448 Z" fill="#f7f3ed" />
+  <path d="M252 500 L288 500 L256 516 Z" fill="#f7f3ed" />
+  <path d="M212 404 L176 392 L210 420 Z" fill="#f7f3ed" />
+  <path d="M204 434 L168 432 L200 450 Z" fill="#f7f3ed" />
+
+  <!-- neck -->
+  <path d="M252 332 C248 348 248 358 250 370" fill="none" stroke="#5b2166" stroke-width="31" stroke-linecap="round" />
+  <path d="M252 332 C248 348 248 358 250 370" fill="none" stroke="#f7f3ed" stroke-width="26" stroke-linecap="round" />
+
+  <!-- body coiling in front of the blade -->
+  <path d="M250 366 C312 356 318 402 254 418" fill="none" stroke="#5b2166" stroke-width="23" stroke-linecap="round" />
+  <path d="M250 366 C312 356 318 402 254 418" fill="none" stroke="#f7f3ed" stroke-width="18" stroke-linecap="round" />
+  <path d="M254 418 C200 430 198 452 240 462" fill="none" stroke="#5b2166" stroke-width="18" stroke-linecap="round" />
+  <path d="M254 418 C200 430 198 452 240 462" fill="none" stroke="#f7f3ed" stroke-width="13" stroke-linecap="round" />
+  <path d="M240 462 C288 472 300 498 268 518" fill="none" stroke="#5b2166" stroke-width="12.5" stroke-linecap="round" />
+  <path d="M240 462 C288 472 300 498 268 518" fill="none" stroke="#f7f3ed" stroke-width="8" stroke-linecap="round" />
+  <path d="M268 518 L286 510 L273 531 Z" fill="#f7f3ed" />
+
+  <!-- dragon head in profile: skull, open jaw, fangs, horns -->
+  <g stroke="#5b2166" stroke-width="4" stroke-linejoin="round">
+    <path d="M264 300 L228 296 L190 306 L150 322 L148 334 L188 341 L214 345 L240 340 L258 322 Z" fill="#f7f3ed" />
+    <path d="M214 347 L190 361 L158 377 L149 366 L172 352 L207 343 Z" fill="#f7f3ed" />
+    <path d="M256 304 L302 266 L294 286 L262 314 Z" fill="#f7f3ed" />
+    <path d="M249 318 L288 291 L282 305 L256 326 Z" fill="#f7f3ed" />
+  </g>
+  <path d="M170 340 L168 353 L164 340 Z" fill="#f7f3ed" />
+  <path d="M186 341 L185 354 L181 341 Z" fill="#f7f3ed" />
+  <path d="M166 369 L169 358 L172 369 Z" fill="#f7f3ed" />
+  <path d="M240 332 L262 342 L242 350 Z" fill="#f7f3ed" />
+  <circle cx="206" cy="318" r="4.5" fill="#a8102f" />
+  <circle cx="155" cy="328" r="2.2" fill="#a8102f" />
+  <path d="M193 309 L219 306" stroke="#ded6e6" stroke-width="2.4" stroke-linecap="round" />
+  <path d="M160 350 C150 356 146 366 148 374" fill="none" stroke="#c81f45" stroke-width="3" stroke-linecap="round" />
+
+  <!-- near foreleg reaching across the blade to the rose -->
+  <path d="M258 392 C246 400 234 406 222 410" fill="none" stroke="#5b2166" stroke-width="17" stroke-linecap="round" />
+  <path d="M258 392 C246 400 234 406 222 410" fill="none" stroke="#f7f3ed" stroke-width="13" stroke-linecap="round" />
+  <path d="M220 410 C210 406 202 398 198 390 M220 414 C208 414 198 410 190 404 M222 418 C212 424 202 426 192 424" fill="none" stroke="#5b2166" stroke-width="10" stroke-linecap="round" />
+  <path d="M220 410 C210 406 202 398 198 390 M220 414 C208 414 198 410 190 404 M222 418 C212 424 202 426 192 424" fill="none" stroke="#f7f3ed" stroke-width="6" stroke-linecap="round" />
+
+  <!-- the rose in the claw -->
+  <g transform="translate(168 408)">
+    <circle r="15" fill="#c81f45" stroke="#5b2166" stroke-width="3" />
+    <path d="M-8 -7 C-3 -14 8 -12 11 -5 C14 3 7 12 -2 11 C-10 10 -15 1 -8 -7 Z" fill="#e83f63" />
+    <path d="M-5 0 C-2 -5 5 -4 5 1 C5 7 -2 8 -5 4" fill="none" stroke="#8d0d28" stroke-width="2.2" stroke-linecap="round" />
+  </g>
+</svg>

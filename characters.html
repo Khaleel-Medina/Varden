@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Build and keep a library of AI character cards. Import Tavern cards, write your own, and chat with them locally on your GPU." />
+    <title>Library | Varden</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+  </head>
+  <body class="library-body">
+    <header class="lib-nav">
+      <a class="brand start-brand" href="./index.html">
+        <img class="brand-mark" src="./assets/varden-mark.svg" alt="" width="42" height="42" />
+        <div>
+          <strong>Varden</strong>
+          <span>Character Vault</span>
+        </div>
+      </a>
+      <nav class="lib-nav-links" aria-label="Sections">
+        <a href="./index.html">Catalog</a>
+        <a href="./chat.html">Chat</a>
+        <a href="./get-started.html">Get Started</a>
+      </nav>
+      <div class="lib-nav-actions">
+        <button class="ghost-button" id="importBtn" type="button">Import cards</button>
+        <button class="solid-button" id="newCharacterBtn" type="button">New character</button>
+      </div>
+    </header>
+
+    <main class="lib-main">
+      <section class="lib-hero">
+        <div>
+          <p class="eyebrow">Your tavern</p>
+          <h1>Character library</h1>
+          <p class="lib-sub">
+            Cards live in this browser, not on a server. Import SillyTavern-format PNG or JSON cards, write your own, then
+            open a character to start a scene on your own GPU.
+          </p>
+        </div>
+        <div class="lib-stats">
+          <div>
+            <strong id="statCharacters">0</strong>
+            <span>Characters</span>
+          </div>
+          <div>
+            <strong id="statTokens">0</strong>
+            <span>Card tokens</span>
+          </div>
+          <div>
+            <strong id="statChats">0</strong>
+            <span>Saved chats</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="lib-controls" aria-label="Library filters">
+        <label class="search-box">
+          <span>Search</span>
+          <input id="searchInput" type="search" placeholder="Name, tag, creator, description…" autocomplete="off" />
+        </label>
+        <label class="lib-sort">
+          <span>Sort</span>
+          <select id="sortSelect">
+            <option value="recent">Recently updated</option>
+            <option value="name">Name A–Z</option>
+            <option value="tokens">Longest card</option>
+            <option value="favorites">Favourites first</option>
+          </select>
+        </label>
+      </section>
+
+      <div class="tag-filter" id="tagFilter" aria-label="Filter by tag"></div>
+
+      <section class="lib-grid" id="characterGrid" aria-live="polite"></section>
+
+      <p class="lib-drop-hint" id="dropHint">Drop PNG or JSON character cards anywhere on this page to import them.</p>
+    </main>
+
+    <dialog class="creator-dialog lib-dialog" id="editorDialog">
+      <form class="creator-form lib-form" id="editorForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow" id="editorEyebrow">New character</p>
+            <h2 id="editorTitle">Create a character card</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="editorClose" aria-label="Close">x</button>
+        </div>
+
+        <div class="avatar-editor">
+          <div class="avatar-preview" id="avatarPreview" aria-hidden="true"></div>
+          <div class="avatar-controls">
+            <label class="upload-label">
+              Card art
+              <input id="avatarInput" type="file" accept="image/*" />
+            </label>
+            <button class="ghost-button" type="button" id="clearAvatar">Use gradient art</button>
+            <p class="field-note">Shown on the card and embedded when you export a PNG card.</p>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input id="fName" required maxlength="60" placeholder="Natsume Kafka" />
+          </label>
+          <label>
+            Creator
+            <input id="fCreator" maxlength="40" placeholder="Your name or alias" />
+          </label>
+        </div>
+
+        <label>
+          Tagline
+          <input id="fTagline" maxlength="140" placeholder="One line that sells the scene." />
+        </label>
+
+        <label>
+          Tags <span class="field-hint">comma separated</span>
+          <input id="fTags" placeholder="fantasy, mystery, slow burn" />
+        </label>
+
+        <label>
+          Description <span class="field-hint">who they are, how they look</span>
+          <textarea id="fDescription" rows="5" placeholder="Appearance, history, role in the world…"></textarea>
+        </label>
+
+        <label>
+          Personality
+          <textarea id="fPersonality" rows="3" placeholder="Temperament, habits, contradictions."></textarea>
+        </label>
+
+        <label>
+          Scenario <span class="field-hint">where the scene opens</span>
+          <textarea id="fScenario" rows="3" placeholder="The setting and situation the user walks into."></textarea>
+        </label>
+
+        <label>
+          First message <span class="field-hint">the greeting that opens a new chat</span>
+          <textarea id="fFirstMessage" rows="4" placeholder="Write the opening line, in character."></textarea>
+        </label>
+
+        <label>
+          Example dialogue <span class="field-hint">{{char}} and {{user}} placeholders allowed</span>
+          <textarea id="fExample" rows="4" placeholder="{{user}}: I only need one night.&#10;{{char}}: &quot;One night,&quot; she repeats, and closes the ledger."></textarea>
+        </label>
+
+        <label>
+          System prompt <span class="field-hint">blank uses the default roleplay instruction</span>
+          <textarea id="fSystemPrompt" rows="3" placeholder="Optional override for how the model should behave."></textarea>
+        </label>
+
+        <label>
+          Post-history instructions <span class="field-hint">sent after the chat history</span>
+          <textarea id="fPostHistory" rows="2" placeholder="Keep replies under 150 words. Never speak for {{user}}."></textarea>
+        </label>
+
+        <section class="lore-section">
+          <div class="lore-heading">
+            <div>
+              <p class="eyebrow">World info</p>
+              <p class="field-note">Entries are injected only when their keywords appear in the recent chat.</p>
+            </div>
+            <button class="ghost-button" type="button" id="addLoreBtn">Add entry</button>
+          </div>
+          <div class="lore-list" id="loreList"></div>
+        </section>
+
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="button" id="editorCancel">Cancel</button>
+          <button class="solid-button" value="default" type="submit" id="editorSave">Save character</button>
+        </div>
+      </form>
+    </dialog>
+
+    <input id="importInput" type="file" accept=".png,.json,image/png,application/json" multiple hidden />
+    <div class="toast" id="toast" hidden></div>
+
+    <script type="module" src="./characters.js"></script>
+  </body>
+</html>

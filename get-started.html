@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Get Started | Varden</title>
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/icon-180.png" />
   </head>
   <body class="start-body">
     <main class="start-shell">
       <nav class="start-nav" aria-label="Primary">
         <a class="brand start-brand" href="./index.html">
-          <span class="brand-mark">V</span>
+          <img class="brand-mark" src="./assets/varden-mark.svg" alt="" width="42" height="42" />
           <div>
             <strong>Varden</strong>
             <span>Character Vault</span>
@@ -18,6 +20,7 @@
         </a>
         <div class="start-nav-actions">
           <a href="./index.html">Catalog</a>
+          <a href="./chat.html">Chat</a>
           <a href="#models">Models</a>
           <a class="solid-link" href="./index.html">Explore</a>
         </div>
@@ -28,7 +31,7 @@
           <p class="eyebrow">Create and host characters</p>
           <h1>Build your first Varden character vault.</h1>
           <p>
-            Start with profiles, tags, avatars, and prompt-ready character notes. Add chat later with a model provider that fits your budget.
+            Start with profiles, tags, avatars, and prompt-ready character notes — then talk to them. Chat runs on your own GPU through WebGPU, so there are no API keys to manage and no messages to hand to a provider.
           </p>
           <div class="hero-actions">
             <a class="solid-link" href="./index.html">Browse catalog</a>
@@ -78,8 +81,8 @@
           </article>
           <article class="step-card">
             <span>03</span>
-            <h3>Add model routing</h3>
-            <p>When chat is ready, route messages through your backend so API keys and usage limits stay protected.</p>
+            <h3>Chat on your own GPU</h3>
+            <p>Open the chat page, pick a model, and load it once. Weights download into the browser cache and every reply is generated on the device.</p>
           </article>
         </div>
       </section>
@@ -87,7 +90,7 @@
       <section class="start-section" id="models">
         <div class="section-heading">
           <p class="eyebrow">Chat Engine</p>
-          <h2>Use Hugging Face or OpenAI API.</h2>
+          <h2>Local models first. Cloud providers stay optional.</h2>
         </div>
         <div class="provider-grid">
           <article class="provider-card">

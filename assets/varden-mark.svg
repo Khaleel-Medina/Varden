@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Varden">
+  <defs>
+    <linearGradient id="field" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7d3089" />
+      <stop offset="100%" stop-color="#42174d" />
+    </linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d6cfe0" />
+      <stop offset="45%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#ded7e8" />
+    </linearGradient>
+    <g id="wing">
+      <path d="M61 72 C55 58 47 42 37 27 C32 33 27 41 22 49 Q32 51 35 59 C31 63 27 67 24 71 Q34 72 38 79 C37 83 37 87 37 90 C49 94 57 82 61 72 Z" fill="#f7f3ed" />
+    </g>
+  </defs>
+
+  <rect width="128" height="128" fill="url(#field)" />
+
+  <use href="#wing" />
+  <use href="#wing" transform="translate(128 0) scale(-1 1)" />
+
+  <path d="M68 96 C73 100 76 104 77 108" fill="none" stroke="#5b2166" stroke-width="7" stroke-linecap="round" />
+  <path d="M68 96 C73 100 76 104 77 108" fill="none" stroke="#e6dfee" stroke-width="4.5" stroke-linecap="round" />
+  <path d="M59 86 C77 88 78 100 60 103" fill="none" stroke="#5b2166" stroke-width="8.4" stroke-linecap="round" />
+  <path d="M59 86 C77 88 78 100 60 103" fill="none" stroke="#ded6e6" stroke-width="5.4" stroke-linecap="round" />
+
+  <!-- sword -->
+  <path d="M44 52 C56 58 72 58 84 52 L84 57 C72 63 56 63 44 57 Z" fill="url(#steel)" />
+  <rect x="61" y="38" width="6" height="12" rx="2" fill="#e7e1ee" />
+  <circle cx="64" cy="34" r="4" fill="#f7f3ed" />
+  <path d="M61.4 58 H66.6 L65.6 110 L64 122 L62.4 110 Z" fill="url(#steel)" />
+
+  <!-- spines -->
+  <path d="M73 94 L84 86 L78 99 Z" fill="#f7f3ed" />
+  <path d="M74 102 L85 102 L76 110 Z" fill="#f7f3ed" />
+
+  <!-- neck -->
+  <path d="M59 80 C58 85 58 88 59 92" fill="none" stroke="#5b2166" stroke-width="11.5" stroke-linecap="round" />
+  <path d="M59 80 C58 85 58 88 59 92" fill="none" stroke="#f7f3ed" stroke-width="8" stroke-linecap="round" />
+
+  <!-- body -->
+  <path d="M59 88 C75 85 76 99 59 102" fill="none" stroke="#5b2166" stroke-width="8" stroke-linecap="round" />
+  <path d="M59 88 C75 85 76 99 59 102" fill="none" stroke="#f7f3ed" stroke-width="5.4" stroke-linecap="round" />
+  <path d="M59 102 C45 105 45 112 56 115" fill="none" stroke="#5b2166" stroke-width="6.4" stroke-linecap="round" />
+  <path d="M59 102 C45 105 45 112 56 115" fill="none" stroke="#f7f3ed" stroke-width="4" stroke-linecap="round" />
+
+  <!-- dragon head in profile -->
+  <g stroke="#5b2166" stroke-width="1.8" stroke-linejoin="round">
+    <path d="M60 72 L52 71 L45 73.5 L36 78 L35.5 82 L44 84 L49 85 L54 83.5 L58 79 Z" fill="#f7f3ed" />
+    <path d="M49 85.5 L44 89 L37.5 93 L35 89.5 L40 86.5 L48 84 Z" fill="#f7f3ed" />
+    <path d="M58 73 L69 64.5 L66 69 L59.5 76 Z" fill="#f7f3ed" />
+    <path d="M56.5 77 L65 72 L63.5 75.5 L58 79.5 Z" fill="#f7f3ed" />
+  </g>
+  <path d="M41 84 L40.5 88 L39 84 Z" fill="#f7f3ed" />
+  <path d="M39.5 90 L40.5 87 L41.5 90.5 Z" fill="#f7f3ed" />
+  <circle cx="47" cy="78.5" r="1.9" fill="#a8102f" />
+
+  <!-- foreleg and talons on the rose -->
+  <path d="M62 97 C57 100 53 102 49 104" fill="none" stroke="#5b2166" stroke-width="7.5" stroke-linecap="round" />
+  <path d="M62 97 C57 100 53 102 49 104" fill="none" stroke="#f7f3ed" stroke-width="5.5" stroke-linecap="round" />
+  <path d="M48 104 C44 102 41 99 39 96 M48 106 C44 107 40 106 37 104" fill="none" stroke="#5b2166" stroke-width="4.6" stroke-linecap="round" />
+  <path d="M48 104 C44 102 41 99 39 96 M48 106 C44 107 40 106 37 104" fill="none" stroke="#f7f3ed" stroke-width="2.8" stroke-linecap="round" />
+
+  <!-- rose -->
+  <circle cx="37" cy="101" r="6" fill="#c81f45" stroke="#5b2166" stroke-width="1.6" />
+  <path d="M35 99 C36 96 41 96 41 100 C41 104 35 104 35 101" fill="none" stroke="#8d0d28" stroke-width="1.2" stroke-linecap="round" />
+</svg>
