@@ -83,8 +83,10 @@ const SCENE_STOP =
 // "Doggy style sounds nice" all mention the act and none of them is happening, so a clause
 // has to be a statement and contain something actually being done before it can start one.
 const SCENE_QUESTION = /\?\s*$/;
+// Negotiation belongs here too. "I offer her $100 for doggy style" is a statement with the act
+// in it and nothing happening, and it was the sentence that started a device unasked.
 const SCENE_HEDGE =
-  /\b(can|could|would|should|shall|may|might|wanna|want to|wants to|want me to|thinking about|thought about|in the mood|how about|what if|if (we|you|i)|maybe|perhaps|ever (tried|done)|propos\w*|suggest\w*|ask(s|ed|ing)?|wonder\w*|imagine|question)\b/i;
+  /\b(can|could|would|should|shall|may|might|wanna|want to|wants to|want me to|thinking about|thought about|in the mood|how about|what if|if (we|you|i)|maybe|perhaps|ever (tried|done)|propos\w*|suggest\w*|ask(s|ed|ing)?|wonder\w*|imagine|question|offer(s|ed|ing)?|pay(s|ing)?|paid|buy(s|ing)?|bought|bid|price|fee|cost|hire(s|d)?|money|cash|dollars?|deal)\b|\$\s?\d/i;
 const SCENE_ACTION =
   /\b(take|takes|took|taking|grab|grabs|grabbed|grabbing|pull|pulls|pulled|pulling|push|pushes|pushed|pushing|thrust|thrusts|thrusting|drive|drives|drove|slam|slams|slammed|pound|pounds|pounded|fuck|fucks|fucked|fucking|ride|rides|rode|riding|grind|grinds|grinding|hump|humps|humping|suck|sucks|sucked|sucking|lick|licks|licked|licking|kiss|kisses|kissed|kissing|finger|fingers|fingered|fingering|stroke|strokes|stroked|stroking|palm|palms|touch|touches|touched|touching|slide|slides|slid|sliding|press|presses|pressed|pressing|bend|bends|bent|bending|pin|pins|pinned|lift|lifts|lifted|roll|rolls|rolled|wrap|wraps|wrapped|guide|guides|guided|enter|enters|entered|entering|kneel|kneels|knelt|kneeling|spread|spreads|hold|holds|held|holding|pump|pumps|pumped|pumping|move|moves|moved|moving|buck|bucks|bucked|rock|rocks|rocked|arch|arches|arched|clutch|clutches|clutched|grip|grips|gripped|moan|moans|moaned|groan|groans|groaned|gasp|gasps|gasped)\b/i;
 
@@ -92,15 +94,34 @@ function sceneIsTalk(clause) {
   return SCENE_QUESTION.test(clause) || SCENE_HEDGE.test(clause);
 }
 
+// A verb has to belong to the same moment as the cue: "he takes her money and promises doggy
+// style" performs nothing, however many action words the sentence contains.
+const SCENE_WINDOW = 48;
+
+function actionNear(clause, at) {
+  const scan = new RegExp(SCENE_ACTION.source, 'gi');
+  let match;
+  while ((match = scan.exec(clause))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (at >= start - SCENE_WINDOW && at <= end + SCENE_WINDOW) return true;
+    if (match.index === scan.lastIndex) scan.lastIndex += 1;
+  }
+  return false;
+}
+
 // The last cue that is actually being performed in this clause, or null when it is only
 // being discussed.
 function sceneCueIn(clause) {
-  if (sceneIsTalk(clause) || !SCENE_ACTION.test(clause)) return null;
+  if (sceneIsTalk(clause)) return null;
   let best = null;
   for (const [act, pattern] of Object.entries(SCENE_CUES)) {
-    const at = lastCueIndex(clause, pattern);
-    if (at < 0 || (best && at <= best.at)) continue;
-    best = { act, at };
+    const scan = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
+    let match;
+    while ((match = scan.exec(clause))) {
+      if (actionNear(clause, match.index) && (!best || match.index > best.at)) best = { act, at: match.index };
+      if (match.index === scan.lastIndex) scan.lastIndex += 1;
+    }
   }
   return best;
 }
