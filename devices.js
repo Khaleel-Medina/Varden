@@ -139,6 +139,24 @@ function sceneCueIn(clause) {
   return best;
 }
 
+// "Don't stop" is the most common line in this genre, and it used to halt the device — the
+// exact opposite of what the prose says. A stop cue counts only when it is not being denied.
+const SCENE_NO_STOP =
+  /\b(do not|don'?t|never|can'?t|cannot|won'?t|wouldn'?t|not)\s+((you|him|her|me|us|it|dare|ever|even|to|want|let|gonna)\s+){0,3}$|\b(a|an|the|full|bus|pit|truck|next|last|one|this|that)\s+$/i;
+
+function lastStopIndex(clause) {
+  const flags = SCENE_STOP.flags.includes('g') ? SCENE_STOP.flags : `${SCENE_STOP.flags}g`;
+  const scan = new RegExp(SCENE_STOP.source, flags);
+  let best = -1;
+  let match;
+  while ((match = scan.exec(clause))) {
+    const before = clause.slice(Math.max(0, match.index - 28), match.index);
+    if (!SCENE_NO_STOP.test(before)) best = match.index;
+    if (match.index === scan.lastIndex) scan.lastIndex += 1;
+  }
+  return best;
+}
+
 function lastCueIndex(text, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
   const scan = new RegExp(pattern.source, flags);
@@ -154,6 +172,11 @@ function lastCueIndex(text, pattern) {
 // How long a change of act takes to travel. Long enough to feel like a change of rhythm,
 // short enough that it is clearly following the text rather than lagging behind it.
 const BLEND_MS = 1500;
+
+// A stream usually has a full stop every sentence or two, but dashes and clipped fragments can
+// run a long way without one. Waiting for punctuation would land the change late and all at
+// once, so the buffer is also read at a space once it gets long.
+const SCENE_FLUSH_CHARS = 240;
 
 export class Scene {
   constructor({ now = () => Date.now(), idleMs = 90000, fluid = true } = {}) {
@@ -185,7 +208,7 @@ export class Scene {
       const clause = match[0];
       const base = match.index;
       // A question about stopping must not stop anything; a statement about stopping must.
-      const stopAt = SCENE_QUESTION.test(clause) ? -1 : lastCueIndex(clause, SCENE_STOP);
+      const stopAt = SCENE_QUESTION.test(clause) ? -1 : lastStopIndex(clause);
       const cue = sceneCueIn(clause);
       if (stopAt >= 0 && (!cue || stopAt >= cue.at)) best = { act: null, at: base + stopAt };
       else if (cue) best = { act: cue.act, at: base + cue.at };
@@ -1082,8 +1105,13 @@ export function createDevices({ onStatus } = {}) {
         sceneBuffer.lastIndexOf('?'),
         sceneBuffer.lastIndexOf('\n')
       );
-      if (boundary >= 0 || sceneBuffer.length > 500) {
-        const cut = boundary >= 0 ? boundary + 1 : sceneBuffer.length;
+      if (boundary >= 0 || sceneBuffer.length > SCENE_FLUSH_CHARS) {
+        let cut = boundary >= 0 ? boundary + 1 : sceneBuffer.length;
+        if (boundary < 0) {
+          // Cutting mid-word would split a cue in half and lose both halves.
+          const space = sceneBuffer.lastIndexOf(' ');
+          cut = space > 0 ? space + 1 : sceneBuffer.length;
+        }
         scene.observe(sceneBuffer.slice(0, cut));
         sceneBuffer = sceneBuffer.slice(cut);
       }
