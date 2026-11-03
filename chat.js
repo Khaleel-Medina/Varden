@@ -665,24 +665,46 @@ function activateLocal(model) {
   els.notice.hidden = true;
 }
 
+// A blocked cross-origin request and a server that is not there both arrive as the same
+// TypeError, which is why the visitor only ever got "could not reach your server". An
+// opaque no-cors GET is not subject to the CORS check, so it resolves whenever anything
+// is listening: that separates "refused this page" from "nothing answered".
+//
+async function localAnswersAtAll() {
+  try {
+    await fetch(localEndpoint('/models'), { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(4000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function* localStream(prompt) {
   const controller = new AbortController();
   state.hostedAbort = controller;
   const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
   if (state.local.key) headers.Authorization = `Bearer ${state.local.key}`;
-  const response = await fetch(localEndpoint('/chat/completions'), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: state.settings.localModel,
-      messages: prompt.messages,
-      stream: true,
-      temperature: Number(state.settings.temperature),
-      top_p: Number(state.settings.topP),
-      max_tokens: Number(state.settings.maxTokens),
-    }),
-    signal: controller.signal,
-  });
+  let response;
+  try {
+    response = await fetch(localEndpoint('/chat/completions'), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        model: state.settings.localModel,
+        messages: prompt.messages,
+        stream: true,
+        temperature: Number(state.settings.temperature),
+        top_p: Number(state.settings.topP),
+        max_tokens: Number(state.settings.maxTokens),
+      }),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    // Stop is not a failure, so it must not be turned into a diagnosis.
+    if (state.stopRequested || /abort/i.test(String(error?.name || ''))) throw error;
+    const listening = await localAnswersAtAll();
+    throw new Error(listening ? `LocalOriginRefused ${localBase()}` : `LocalSilent ${localBase()}`);
+  }
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
     throw new Error(`Local server failed (${response.status}) ${detail.slice(0, 300)}`.trim());
@@ -1655,8 +1677,14 @@ function describeError(error) {
     return 'The GPU ran out of memory. Try a smaller model, or start a fresh chat to shorten the context.';
   }
   if (/device.?lost|lost device/i.test(message)) return 'The GPU device was lost. Unload the model and load it again.';
-  if (/Failed to fetch|NetworkError|Load failed|net::/i.test(message) && localActive()) {
-    return 'The page could not reach your server. Check it is running at that address, that it allows this page\u2019s origin (OLLAMA_ORIGINS, or LM Studio\u2019s CORS switch), and that the browser\u2019s local-network prompt was accepted. From an https page only localhost addresses are allowed over plain http.';
+  if (/LocalOriginRefused/.test(message)) {
+    // Ollama answers 403 to any origin it was not started with, and the browser turns that
+    // into the same opaque network error as a dead port. Naming the origin it needs is the
+    // whole fix, so it is printed verbatim and copyable.
+    return `Your server is running and refused this page: Ollama only accepts origins it was started with (it answers 403 otherwise). Quit it completely, then start it again with OLLAMA_ORIGINS=${location.origin} — for LM Studio, turn its CORS switch on instead. On Windows, quit the tray app first, or it keeps the port and your new settings never apply.`;
+  }
+  if (/LocalSilent/.test(message)) {
+    return 'Nothing answered at that address. Start your server, check the port in its output, and accept the browser\u2019s local-network prompt if it appeared. From an https page only loopback addresses (127.0.0.1, localhost) may be used over plain http.';
   }
   if (/Failed to fetch|network|net::/i.test(message) && hostedActive()) {
     return 'The request to the hosted provider did not go through. Check your connection and that the key is still valid, then try again.';
