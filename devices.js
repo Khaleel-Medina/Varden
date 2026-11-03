@@ -91,12 +91,25 @@ function lastCueIndex(text, pattern) {
   return best;
 }
 
+// How long a change of act takes to travel. Long enough to feel like a change of rhythm,
+// short enough that it is clearly following the text rather than lagging behind it.
+const BLEND_MS = 1500;
+
 export class Scene {
-  constructor({ now = () => Date.now(), idleMs = 90000 } = {}) {
+  constructor({ now = () => Date.now(), idleMs = 90000, fluid = true } = {}) {
     this.now = now;
     this.idleMs = idleMs;
     this.act = null;
     this.lastAt = 0;
+    // Fluid mode eases into a new act; off, it changes between one stroke and the next.
+    this.fluid = fluid !== false;
+    this.prev = null;
+    this.switchedAt = 0;
+  }
+
+  setFluid(on) {
+    this.fluid = on !== false;
+    if (!this.fluid) this.prev = null;
   }
 
   // Last cue wins, so "takes you from behind, then stops" ends stopped rather than stuck at
@@ -113,9 +126,32 @@ export class Scene {
       best = { act, at };
     }
     if (!best) return this.act;
+    if (best.act !== this.act) {
+      // Freeze wherever the motion currently is, not the act it was heading for, so a change
+      // during a change still starts from what the device is doing.
+      this.prev = this.act ? this.current() : null;
+      this.switchedAt = this.now();
+    }
     this.act = best.act;
     this.lastAt = this.now();
     return this.act;
+  }
+
+  // The numbers motion actually uses right now: a blend while fluid, the act's own values
+  // otherwise. Stop cues leave no target, so they take the fallback profile and stop anyway.
+  current() {
+    const target = this.profile || SCENES.thrust;
+    if (!this.fluid || !this.prev) {
+      return { half: target.half, depth: target.depth, sustain: target.sustain };
+    }
+    const k = clamp((this.now() - this.switchedAt) / BLEND_MS, 0, 1);
+    const ease = k * k * (3 - 2 * k);
+    const mix = (a, b) => a + (b - a) * ease;
+    return {
+      half: [mix(this.prev.half[0], target.half[0]), mix(this.prev.half[1], target.half[1])],
+      depth: [mix(this.prev.depth[0], target.depth[0]), mix(this.prev.depth[1], target.depth[1])],
+      sustain: mix(this.prev.sustain, target.sustain),
+    };
   }
 
   get profile() {
@@ -134,17 +170,18 @@ export class Scene {
   }
 
   pace(level) {
-    const half = (this.profile || SCENES.thrust).half;
+    const half = this.current().half;
     const value = clamp(Number(level) || 0, 0, 1);
     return Math.max(300, Math.round(half[1] - (half[1] - half[0]) * value));
   }
 
   depth() {
-    return (this.profile || SCENES.thrust).depth;
+    const depth = this.current().depth;
+    return [Math.round(depth[0]), Math.round(depth[1])];
   }
 
   sustainLevel() {
-    return (this.profile || SCENES.thrust).sustain;
+    return this.current().sustain;
   }
 }
 
@@ -897,6 +934,7 @@ export function createDevices({ onStatus } = {}) {
       chosen.levelSource = () => reaction.peek();
       chosen.scene = scene;
       sustainOn = config.sustain !== false;
+      scene.setFluid(config.fluid !== false);
       failures = 0;
       muted = false;
       suppressed = false;
@@ -914,6 +952,11 @@ export function createDevices({ onStatus } = {}) {
     setSustain(on) {
       sustainOn = on !== false;
       if (!sustainOn && sustained) stopNow();
+    },
+
+    // Fluid mode only changes how a scene change is travelled; it never starts or stops one.
+    setFluid(on) {
+      scene.setFluid(on);
     },
 
     // The visitor's own message counts as the scene speaking: "turn around" has to change the

@@ -202,6 +202,7 @@ const DEFAULT_SETTINGS = {
     handyApi: 'auto',
     cap: 60,
     sustain: true,
+    fluid: true,
     confirmed: false,
   },
 };
@@ -325,6 +326,7 @@ const els = {
   handyApi: $('handyApi'),
   handyApiNote: $('handyApiNote'),
   deviceSustain: $('deviceSustain'),
+  deviceFluid: $('deviceFluid'),
   deviceMax: $('deviceMax'),
   deviceMaxOut: $('deviceMaxOut'),
   deviceConnect: $('deviceConnectBtn'),
@@ -381,6 +383,7 @@ function loadSettings() {
   device.handyMode = HANDY_MODES.includes(device.handyMode) ? device.handyMode : 'hamp';
   device.handyApi = HANDY_APIS.includes(device.handyApi) ? device.handyApi : 'auto';
   device.sustain = device.sustain !== false;
+  device.fluid = device.fluid !== false;
 }
 
 function clampSetting(value, fallback, low = 5, high = 100) {
@@ -1889,6 +1892,7 @@ function buildDeviceUi() {
   if (els.deviceMax) els.deviceMax.value = String(config.cap);
   if (els.deviceMaxOut) els.deviceMaxOut.value = String(config.cap);
   if (els.deviceSustain) els.deviceSustain.checked = config.sustain !== false;
+  if (els.deviceFluid) els.deviceFluid.checked = config.fluid !== false;
   renderDeviceFields();
   renderDeviceStatus();
 }
@@ -2618,6 +2622,11 @@ function bindEvents() {
     saveSettings();
     state.devices?.setSustain(deviceConfig().sustain);
     renderDeviceStatus();
+  });
+  els.deviceFluid?.addEventListener('change', () => {
+    deviceConfig().fluid = els.deviceFluid.checked;
+    saveSettings();
+    state.devices?.setFluid(deviceConfig().fluid);
   });
   els.handyApi?.addEventListener('change', () => {
     const choice = els.handyApi.value;
