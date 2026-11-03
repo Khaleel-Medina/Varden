@@ -267,9 +267,18 @@
                 <input id="handyKey" type="password" autocomplete="off" spellcheck="false" placeholder="from the Handy app" />
               </label>
               <label class="field">
-                App key <span class="field-hint">from the Handy developer portal</span>
-                <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional" />
+                App key <span class="field-hint">needed by Handy 2 · free at user.handyfeeling.com</span>
+                <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional for the original Handy" />
               </label>
+              <label class="field">
+                Cloud API
+                <select id="handyApi">
+                  <option value="auto">Detect · firmware 4 uses v3, older uses v2</option>
+                  <option value="v3">Handy 2 / 2 Pro · firmware 4 · API v3</option>
+                  <option value="v2">Original Handy · firmware 3 · API v2</option>
+                </select>
+              </label>
+              <p class="field-note" id="handyApiNote"></p>
               <label class="field">
                 How it moves
                 <select id="handyMode">
@@ -282,6 +291,8 @@
                 Unlike the two above, The Handy is driven through its vendor's cloud, so commands travel over the
                 internet and the connection key identifies your device to them. Still only intensity, speed and
                 position — no text. The stroker keeps running if this tab dies, so Stop is not optional here.
+                The cloud allows 240 requests a minute, which is why scene-synced strokes slow their pace at the top
+                rather than overspend it.
               </p>
             </div>
 

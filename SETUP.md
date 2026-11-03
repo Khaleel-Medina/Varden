@@ -313,9 +313,17 @@ Three transports, because they are genuinely different deals:
 - **Intiface Central (desktop)** — any buttplug.io-compatible toy, connected in Intiface, over
   `ws://127.0.0.1:12345`. Nothing leaves the machine and the localhost exception means no mixed-content problem. Costs
   the visitor a desktop install.
-- **The Handy** — the vendor's cloud (`https://www.handyfeeling.com/api/handy/v2/`) with the visitor's connection key
-  and, if their developer portal issued one, an app key. It is the only device with a choice of two modes, and the
-  panel explains the difference next to the selector:
+- **The Handy** — the vendor's cloud, with the visitor's connection key (and an app key on firmware 4). Two API
+  generations exist and the hardware decides which one answers: **firmware 4** (Handy 2, 2 Pro) only speaks v3 at
+  `https://www.handyfeeling.com/api/handy-rest/v3/` and requires an app key from `user.handyfeeling.com`; **firmware 3**
+  (the original Handy) only speaks v2 at `https://www.handyfeeling.com/api/handy/v2/` and needs no app key. The panel's
+  *Cloud API* selector defaults to **Detect**, which tries v3 when a key is present, falls back to v2, and reports what
+  it reached (model, firmware, hardware, API) in the connected label. Verified against the live service: both bases
+  answer this site's origin on preflight with `x-connection-key`, `x-api-key` and `content-type`; v3 answers
+  `401 Unauthenticated` without a valid key; both generations can answer `200` with an error envelope, so the code
+  reads `error` before trusting the status. The cloud allows about 240 requests a minute, which is why scene-synced
+  strokes stop shortening at 300 ms half-strokes. It is the only device with a choice of two modes, and the panel
+  explains the difference next to the selector:
   - *Steady speed* (HAMP, `mode: 0`) sends one velocity 0-100 per tick. Smooth, predictable, a handful of requests per
     minute.
   - *Scene-synced* (HDSP, `mode: 2`) sends alternating positions (`hdsp/xpt`, 0% and 100% of the stroke zone) with a

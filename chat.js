@@ -199,6 +199,7 @@ const DEFAULT_SETTINGS = {
     handyKey: '',
     handyAppKey: '',
     handyMode: 'hamp',
+    handyApi: 'auto',
     cap: 60,
     confirmed: false,
   },
@@ -320,6 +321,8 @@ const els = {
   handyAppKey: $('handyAppKey'),
   handyMode: $('handyMode'),
   handyModeNote: $('handyModeNote'),
+  handyApi: $('handyApi'),
+  handyApiNote: $('handyApiNote'),
   deviceMax: $('deviceMax'),
   deviceMaxOut: $('deviceMaxOut'),
   deviceConnect: $('deviceConnectBtn'),
@@ -374,6 +377,7 @@ function loadSettings() {
   if (typeof device.handyKey !== 'string') device.handyKey = '';
   if (typeof device.handyAppKey !== 'string') device.handyAppKey = '';
   device.handyMode = HANDY_MODES.includes(device.handyMode) ? device.handyMode : 'hamp';
+  device.handyApi = HANDY_APIS.includes(device.handyApi) ? device.handyApi : 'auto';
 }
 
 function clampSetting(value, fallback, low = 5, high = 100) {
@@ -1822,12 +1826,29 @@ const DEVICE_CONFIRM_COPY = {
   buttplug:
     'From now on the toy reacts while a reply streams in, and it stops when the reply ends or this tab goes to the background. Commands stay on this computer, inside Intiface — only intensity numbers, never the words.',
   handy:
-    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key, and they carry only speed values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
+    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key (and app key on firmware 4), and they carry only speed and position values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
 };
 
 const deviceConfig = () => state.settings.device;
 
 const HANDY_MODES = ['hamp', 'hdsp'];
+
+// Firmware 4 hardware only answers API v3 and needs an app key; firmware 3 only answers v2.
+// 'auto' tries the newer one when a key is present and falls back, so nobody has to know
+// which firmware their device runs.
+const HANDY_APIS = ['auto', 'v3', 'v2'];
+
+const HANDY_API_COPY = {
+  auto: 'Detect: with an app key it tries API v3 first and falls back to v2; without one it goes straight to v2, which is all the original Handy uses.',
+  v3: 'API v3 only: firmware 4 hardware — Handy 2 and 2 Pro. The connection key and an app key from user.handyfeeling.com are both required.',
+  v2: 'API v2 only: the original Handy on firmware 3. The connection key is enough; an app key is ignored here.',
+};
+
+function renderHandyApiNote() {
+  if (!els.handyApiNote) return;
+  const api = HANDY_APIS.includes(deviceConfig().handyApi) ? deviceConfig().handyApi : 'auto';
+  els.handyApiNote.textContent = HANDY_API_COPY[api];
+}
 
 // Only The Handy offers a choice here, because only it can either hold one speed or be
 // stepped to positions. The copy is the selector's other half: the two modes feel
@@ -1855,6 +1876,7 @@ function setDeviceStatus(text) {
 function buildDeviceUi() {
   const config = deviceConfig();
   if (els.handyMode) els.handyMode.value = HANDY_MODES.includes(config.handyMode) ? config.handyMode : 'hamp';
+  if (els.handyApi) els.handyApi.value = HANDY_APIS.includes(config.handyApi) ? config.handyApi : 'auto';
   if (els.deviceKind) els.deviceKind.value = DEVICE_KINDS.includes(config.kind) ? config.kind : 'off';
   if (els.lovenseHost) els.lovenseHost.value = config.lovenseHost;
   if (els.lovensePort) els.lovensePort.value = String(config.lovensePort);
@@ -1874,6 +1896,7 @@ function renderDeviceFields() {
   if (els.deviceFieldsHandy) els.deviceFieldsHandy.hidden = kind !== 'handy';
   if (els.deviceConfirmBody) els.deviceConfirmBody.textContent = DEVICE_CONFIRM_COPY[kind] || '';
   renderHandyModeNote();
+  renderHandyApiNote();
   syncDeviceControls();
 }
 
@@ -1884,8 +1907,9 @@ function syncDeviceControls() {
   if (els.deviceTest) els.deviceTest.disabled = !connected || state.deviceTesting === true;
   if (els.deviceDisconnect) els.deviceDisconnect.disabled = !connected;
   if (els.deviceKind) els.deviceKind.disabled = connected;
-  // The mode is sent once at connect, so changing it mid-session would be a lie.
+  // The mode and the API are settled at connect, so changing them mid-session would be a lie.
   if (els.handyMode) els.handyMode.disabled = connected;
+  if (els.handyApi) els.handyApi.disabled = connected;
 }
 
 function renderDeviceStatus() {
@@ -2578,6 +2602,12 @@ function bindEvents() {
     deviceConfig().handyMode = HANDY_MODES.includes(choice) ? choice : 'hamp';
     saveSettings();
     renderHandyModeNote();
+  });
+  els.handyApi?.addEventListener('change', () => {
+    const choice = els.handyApi.value;
+    deviceConfig().handyApi = HANDY_APIS.includes(choice) ? choice : 'auto';
+    saveSettings();
+    renderHandyApiNote();
   });
   els.deviceMax?.addEventListener('input', () => {
     deviceConfig().cap = clampSetting(els.deviceMax.value, 60);

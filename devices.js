@@ -10,7 +10,23 @@
 // the local GPU route as well as the hosted ones.
 
 const LOVENSE_DOMAIN = 'lovense.club';
-const HANDY_BASE = 'https://www.handyfeeling.com/api/handy/v2/';
+
+// The vendor runs two cloud API generations, and the hardware decides which one it speaks:
+// firmware 4 (Handy 2 and 2 Pro) answers only on v3, firmware 3 (the original Handy) only on
+// v2. A firmware 4 device sent a v2 command does not politely error — the server has no such
+// device in its v2 registry — so the generation is negotiated at connect, never assumed.
+const HANDY_BASES = {
+  v2: 'https://www.handyfeeling.com/api/handy/v2/',
+  v3: 'https://www.handyfeeling.com/api/handy-rest/v3/',
+};
+
+// Firmware reports "430+dcee7e58": a three-digit build number plus a build hash. 430 means
+// 4.3.0, and the hash is noise in a status line.
+function handyFirmwareLabel(raw) {
+  const text = String(raw || '').trim();
+  const build = text.split('+')[0];
+  return /^\d{3}$/.test(build) ? build.split('').join('.') : text || '';
+}
 
 // A Lovense command that expires on its own: a tab that dies stops the toy within two
 // seconds instead of leaving it running. An indefinite hold is never sent — that is the
@@ -20,10 +36,11 @@ export const REACTION_TICK_MS = 1500;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
-// Scene-synced strokes: faster prose means a shorter half-stroke. 650 ms at rest, 240 ms
-// at full intensity, which is also the ceiling the vendor's API accepts comfortably.
+// Scene-synced strokes: faster prose means a shorter half-stroke. 650 ms at rest, 300 ms
+// at full intensity. The floor is the rate limit talking: the cloud allows 240 requests a
+// minute, and 300 ms half-strokes spend 200 of them, leaving room for the connecting calls.
 export function handyHalfPeriod(level) {
-  return Math.round(650 - 410 * clamp(Number(level) || 0, 0, 1));
+  return Math.round(650 - 350 * clamp(Number(level) || 0, 0, 1));
 }
 
 // HDSP works in percent of the stroke zone, so a stroke is "be at this end in T ms".
@@ -385,6 +402,12 @@ class HandyLink {
     this.label = 'The Handy';
     // 'hamp' is one continuous stroke speed; 'hdsp' is real strokes timed from the text.
     this.mode = config.handyMode === 'hdsp' ? 'hdsp' : 'hamp';
+    // 'auto' is the honest default: try what the saved keys allow and believe the device.
+    this.preference = ['auto', 'v3', 'v2'].includes(config.handyApi) ? config.handyApi : 'auto';
+    // Set by the handshake; every request and every unit depends on it.
+    this.api = 'v2';
+    this.firmware = '';
+    this.hardware = '';
     // Set by the controller: lets every stroke read the freshest intensity instead of the
     // last one-second-and-a-half snapshot.
     this.levelSource = null;
@@ -410,7 +433,7 @@ class HandyLink {
 
   async call(path, method = 'GET', body) {
     const response = await timedFetch(
-      `${HANDY_BASE}${path}`,
+      `${HANDY_BASES[this.api]}${path}`,
       {
         method,
         headers: this.headers(),
@@ -418,32 +441,79 @@ class HandyLink {
       },
       8000
     );
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(
-        'The Handy rejected those keys. Copy the connection key again from the Handy app; the app key is only needed if the developer portal issued you one.'
-      );
+    const payload = await response.json().catch(() => null);
+    if (response.status === 401 || response.status === 403) throw new Error(this.authMessage());
+    // The ceiling gets its own sentence: "slow down" is actionable, the vendor's "Too many
+    // requests" is not, and a 429 can arrive with or without the usual envelope.
+    if (response.status === 429) {
+      throw new Error('The Handy rate-limited this page (240 requests a minute). It clears on its own; a lower cap or steady speed uses less of it.');
+    }
+    // Both generations can answer 200 and put the refusal in an error envelope, so a status
+    // check alone would report a refused command as a success — this is how a wrong key used
+    // to look like an offline device.
+    if (payload?.error) {
+      const vendor = payload.error;
+      const code = vendor.code ? ` (code ${vendor.code})` : '';
+      throw new Error(`The Handy refused that: ${vendor.message || vendor.name || 'no reason given'}${code}.`);
     }
     if (!response.ok) throw new Error(`The Handy answered ${response.status}.`);
-    return response.json().catch(() => null);
+    // v3 wraps every answer in { result }; v2 answers flat. One line reads both.
+    return payload?.result ?? payload;
+  }
+
+  authMessage() {
+    if (this.api === 'v3') {
+      return 'The Handy cloud did not accept that app key. Firmware 4 devices (Handy 2, 2 Pro) need an app key from user.handyfeeling.com as well as the connection key; the Application ID is the one meant for browser code.';
+    }
+    return 'The Handy rejected those keys. Copy the connection key again from the Handy app; the app key is only needed if the developer portal issued you one.';
   }
 
   async connect() {
     if (!String(this.config.handyKey || '').trim()) {
       throw new Error('Add the Handy connection key — the Handy app shows it under its connection settings.');
     }
+    const appKey = String(this.config.handyAppKey || '').trim();
+    // v3 needs an app key and firmware 4 needs v3; v2 needs no app key and firmware 3 needs
+    // v2. So the saved preference is a starting point and the fallback is the real detector.
+    const attempts =
+      this.preference === 'v3'
+        ? ['v3']
+        : this.preference === 'v2'
+          ? ['v2']
+          : appKey
+            ? ['v3', 'v2']
+            : ['v2'];
+    let firstError = null;
+    for (const api of attempts) {
+      this.api = api;
+      try {
+        await this.handshake();
+        return this.label;
+      } catch (error) {
+        if (!firstError) firstError = error;
+      }
+    }
+    this.api = 'v2';
+    throw firstError || new Error('The Handy did not answer. Check the connection key and that the device is switched on.');
+  }
+
+  async handshake() {
+    if (this.api === 'v3' && !String(this.config.handyAppKey || '').trim()) {
+      throw new Error(
+        'Handy 2 (firmware 4) needs an app key as well: create a free one at user.handyfeeling.com and paste it above.'
+      );
+    }
     const status = await this.call('connected');
     if (!status?.connected) {
       throw new Error('The Handy did not report itself online. Check the key, and that the device is switched on and connected.');
     }
     const info = await this.call('info').catch(() => null);
-    // The model and firmware matter: HDSP needs firmware 3 or newer, and a Handy 1 still on
-    // firmware 2 rejects it outright, so show what we actually reached.
-    const fw = String(info?.firmwareVersion || info?.fwVersion || info?.version || '').trim();
-    const model = String(info?.model || '').trim();
-    const seen = [model, fw ? `FW ${fw}` : ''].filter(Boolean);
+    this.firmware = handyFirmwareLabel(this.api === 'v3' ? info?.fw_version : info?.fwVersion || info?.version);
+    const model = String((this.api === 'v3' ? info?.hw_model_name : info?.model) || '').trim();
+    this.hardware = this.api === 'v3' && Number.isFinite(info?.hw_model_no) ? `HW ${info.hw_model_no}` : '';
+    const seen = [model, this.firmware ? `FW ${this.firmware}` : '', this.hardware, `API ${this.api}`].filter(Boolean);
     this.label = seen.length ? `The Handy (${seen.join(', ')})` : 'The Handy';
     await this.useMode(this.mode);
-    return this.label;
   }
 
   // HAMP is mode 0 and HDSP is mode 2; the mode decides which commands are legal, and
@@ -462,7 +532,8 @@ class HandyLink {
       return;
     }
     await this.useMode('hamp');
-    const velocity = Math.round(value * 100);
+    // v3 takes a fraction of max velocity, v2 a whole percent.
+    const velocity = this.api === 'v3' ? Math.round(value * 1000) / 1000 : Math.round(value * 100);
     if (!this.moving) {
       await this.call('hamp/start', 'PUT', {});
       this.moving = true;
@@ -501,7 +572,16 @@ class HandyLink {
       // is remembered so a test pulse can say what went wrong.
       void this.useMode('hdsp')
         .then(() =>
-          this.call('hdsp/xpt', 'PUT', { position, duration: half, stopOnTarget: true }).catch((error) => {
+          this.call(
+            'hdsp/xpt',
+            'PUT',
+            // v2 names the target `position` and the time `t`; v3 names them `xp` and `t`
+            // and snake_cases the flag. The old body used `position, duration`, which
+            // neither API accepts, so scene-synced strokes never actually moved.
+            this.api === 'v3'
+              ? { xp: position, t: half, stop_on_target: true }
+              : { position, t: half, stopOnTarget: true }
+          ).catch((error) => {
             this.lastStrokeError = error;
           })
         )
