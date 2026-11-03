@@ -408,6 +408,9 @@ class HandyLink {
     this.api = 'v2';
     this.firmware = '';
     this.hardware = '';
+    // Set when the cloud refuses the app key, so a failure can say which of the two things
+    // went wrong instead of blaming the device for a bad key.
+    this.authRejected = false;
     // Set by the controller: lets every stroke read the freshest intensity instead of the
     // last one-second-and-a-half snapshot.
     this.levelSource = null;
@@ -442,7 +445,10 @@ class HandyLink {
       8000
     );
     const payload = await response.json().catch(() => null);
-    if (response.status === 401 || response.status === 403) throw new Error(this.authMessage());
+    if (response.status === 401 || response.status === 403) {
+      this.authRejected = true;
+      throw new Error(this.authMessage());
+    }
     // The ceiling gets its own sentence: "slow down" is actionable, the vendor's "Too many
     // requests" is not, and a 429 can arrive with or without the usual envelope.
     if (response.status === 429) {
@@ -483,21 +489,37 @@ class HandyLink {
           : appKey
             ? ['v3', 'v2']
             : ['v2'];
-    let firstError = null;
+    const failures = [];
     for (const api of attempts) {
       this.api = api;
+      this.authRejected = false;
       try {
         await this.handshake();
         return this.label;
       } catch (error) {
-        if (!firstError) firstError = error;
+        failures.push({ api, message: String(error?.message || error), auth: this.authRejected });
       }
     }
     this.api = 'v2';
-    throw firstError || new Error('The Handy did not answer. Check the connection key and that the device is switched on.');
+    throw new Error(this.explainFailures(failures));
+  }
+
+  // One attempt speaks for itself. Two are a diagnosis: the newer API usually fails over the
+  // key and the older one over the device link, and saying only the last one blamed the
+  // device for a key the cloud had already refused.
+  explainFailures(failures) {
+    if (!failures.length) return 'The Handy did not answer. Check the connection key and that the device is switched on.';
+    if (failures.length === 1) return failures[0].message;
+    const keyProblem = failures.some((failure) => failure.auth);
+    const lead = keyProblem
+      ? 'The cloud refused the app key, so the device was never asked: fix the key before anything else.'
+      : '';
+    const detail = failures.map((failure) => `API ${failure.api}: ${failure.message}`).join(' ');
+    return [lead, detail].filter(Boolean).join(' ');
   }
 
   async handshake() {
+    this.authRejected = false;
     if (this.api === 'v3' && !String(this.config.handyAppKey || '').trim()) {
       throw new Error(
         'Handy 2 (firmware 4) needs an app key as well: create a free one at user.handyfeeling.com and paste it above.'
@@ -505,7 +527,12 @@ class HandyLink {
     }
     const status = await this.call('connected');
     if (!status?.connected) {
-      throw new Error('The Handy did not report itself online. Check the key, and that the device is switched on and connected.');
+      // "Online" here means the vendor's cloud can reach the device, which on firmware 4
+      // means its Wi-Fi link is up. Bluetooth alone keeps the app working but leaves the
+      // cloud with nothing to talk to, so the message names that instead of shrugging.
+      throw new Error(
+        'The cloud cannot reach the device — it reports it offline. On a Handy 2 the Wi-Fi light has to be connected (Bluetooth alone is not enough for cloud control). Check that the device is on Wi-Fi with internet, then try again; on the original Handy, check that it is switched on and paired to the Handy app.'
+      );
     }
     const info = await this.call('info').catch(() => null);
     this.firmware = handyFirmwareLabel(this.api === 'v3' ? info?.fw_version : info?.fwVersion || info?.version);
