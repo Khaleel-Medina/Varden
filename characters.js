@@ -910,10 +910,14 @@ function showAccountError(message) {
 
 function openAccountDialog(note) {
   showAccountError('');
-  if (els.accountNote) els.accountNote.textContent = note || ACCOUNT_NOTE;
+  // renderAccount() rewrites the note for signed-out visitors, so the reason the dialog
+  // was opened has to be written after it. Setting it first silently gave way to the
+  // generic line, which left "Share" opening a sign-in dialog with no explanation.
   renderAccount();
-  if (authUser() && els.accountNote) {
-    els.accountNote.textContent = `Signed in as ${authUser().email}. You can edit or delete anything you publish.`;
+  if (els.accountNote) {
+    els.accountNote.textContent = authUser()
+      ? `Signed in as ${authUser().email}. You can edit or delete anything you publish.`
+      : note || ACCOUNT_NOTE;
   }
   els.accountDialog?.showModal();
 }
