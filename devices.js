@@ -90,6 +90,18 @@ const SCENE_HEDGE =
 const SCENE_ACTION =
   /\b(take|takes|took|taking|grab|grabs|grabbed|grabbing|pull|pulls|pulled|pulling|push|pushes|pushed|pushing|thrust|thrusts|thrusting|drive|drives|drove|slam|slams|slammed|pound|pounds|pounded|fuck|fucks|fucked|fucking|ride|rides|rode|riding|grind|grinds|grinding|hump|humps|humping|suck|sucks|sucked|sucking|lick|licks|licked|licking|kiss|kisses|kissed|kissing|finger|fingers|fingered|fingering|stroke|strokes|stroked|stroking|palm|palms|touch|touches|touched|touching|slide|slides|slid|sliding|press|presses|pressed|pressing|bend|bends|bent|bending|pin|pins|pinned|lift|lifts|lifted|roll|rolls|rolled|wrap|wraps|wrapped|guide|guides|guided|enter|enters|entered|entering|kneel|kneels|knelt|kneeling|spread|spreads|hold|holds|held|holding|pump|pumps|pumped|pumping|move|moves|moved|moving|buck|bucks|bucked|rock|rocks|rocked|arch|arches|arched|clutch|clutches|clutched|grip|grips|gripped|moan|moans|moaned|groan|groans|groaned|gasp|gasps|gasped)\b/i;
 
+// Suffering is not a scene. Crying and pain share vocabulary with intimacy — a throat clutched
+// while sobbing is not a mouth — so a clause carrying distress only counts when it also names
+// an act outright. Distress alone never starts, changes or ends anything.
+const SCENE_DISTRESS =
+  /\b(cry|cries|cried|crying|sob|sobs|sobbed|sobbing|tears?|weep(s|ing)?|wept|whimper(s|ed|ing)?|wail(s|ed|ing)?|pain|pained|ache(s|d|ing)?|hurt(s|ing)?|sore|bruis(e|es|ed|ing)|blood(y|ied)?|bleed(s|ing)?|broken|panic(s|ked|king)?|afraid|scared|terrified|fear(ful)?|trembl(e|es|ed|ing)|shak(e|es|ing)|shiver(s|ed|ing)?|chok(e|es|ed|ing)|struggl(e|es|ed|ing)|beg(s|ged|ging)?|plead(s|ed|ing)?|desperate|uncontrollabl[ey]|splash(es|ed|ing)?|puddle(s)?)\b/i;
+
+// The words that mean the act itself, with no innocent reading. A distressed clause is still
+// read when one of these is present, so "she cries out as he takes her from behind" follows
+// the scene instead of being thrown away with the tears.
+const SCENE_EXPLICIT =
+  /\b(dogg(y|ie)|from behind|missionary|cowgirl|reverse cowgirl|blow ?job|hand ?job|thrust(s|ed|ing)?|pound(s|ed|ing)?|fuck(s|ed|ing)?|ball(s)? deep|inside (her|him|me)|in (her|his|my) mouth|suck(s|ed|ing)? (him|her|me)|ride(s|d)? (him|her|me)|bent over)\b/i;
+
 function sceneIsTalk(clause) {
   return SCENE_QUESTION.test(clause) || SCENE_HEDGE.test(clause);
 }
@@ -114,6 +126,7 @@ function actionNear(clause, at) {
 // being discussed.
 function sceneCueIn(clause) {
   if (sceneIsTalk(clause)) return null;
+  if (SCENE_DISTRESS.test(clause) && !SCENE_EXPLICIT.test(clause)) return null;
   let best = null;
   for (const [act, pattern] of Object.entries(SCENE_CUES)) {
     const scan = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`);
