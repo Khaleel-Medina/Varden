@@ -260,9 +260,15 @@ that can run a genuinely uncensored model with no account, because the model is 
   origin, and Chrome's Local Network Access prompt (and, from an https page, mixed-content rules) decide whether the
   request leaves the tab at all. Errors are reported as the route's own words: a failed fetch names CORS and the
   local-network prompt rather than claiming the model failed.
-- **Not verified end to end here:** no Ollama or LM Studio instance exists in the build environment, so the route was
-  exercised against a stub server on loopback that speaks the same protocol. The real-server path, including the
-  CORS and local-network browser behaviour, still needs a human with a running server.
+- **Verified against real Ollama 0.40.14** (CPU, `qwen2.5:0.5b`) on 2026-11-03: with
+  `OLLAMA_ORIGINS=http://127.0.0.1:3000`, `GET /v1/models` returned the list with
+  `Access-Control-Allow-Origin: http://127.0.0.1:3000`, the page listed the model, activated it, and streamed a
+  complete reply in 3.0s with no console errors. Ollama answered both `/v1/models` and `/v1/chat/completions` with
+  200.
+- **Still unverified:** LM Studio and llama.cpp/vLLM, a GPU-speed server, and Chrome's Local Network Access prompt
+  from the public https origin. Those are browser-permission questions rather than protocol ones: if the model list
+  is empty but typing the name works, CORS is the cause; if nothing leaves the tab at all, it is the permission
+  prompt.
 
 ## Devices (optional hardware, off by default)
 
