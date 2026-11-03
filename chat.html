@@ -325,6 +325,17 @@
               <input id="deviceMax" type="range" min="5" max="100" step="5" value="60" />
             </label>
 
+            <label class="device-sustain">
+              <input id="deviceSustain" type="checkbox" checked />
+              <span>Keep going between replies</span>
+            </label>
+            <p class="field-note">
+              On: the device follows the scene, not the message. It changes pace and depth when the act changes
+              (from behind, oral, hands, grinding, teasing), keeps a steady pace while you type, and stops when the
+              scene says so, when nothing has happened for a minute and a half, after five minutes of holding, or the
+              moment you press Stop or leave the tab. Off: it moves only while a reply streams.
+            </p>
+
             <div class="panel-actions">
               <button class="solid-button" id="deviceConnectBtn" type="button">Connect</button>
               <button class="ghost-button" id="deviceTestBtn" type="button" disabled>Test</button>
@@ -335,8 +346,9 @@
             <div class="device-confirm" id="deviceConfirm" hidden>
               <p class="device-confirm-title">Connect something that moves?</p>
               <p class="device-confirm-body" id="deviceConfirmBody">
-                From now on the device reacts while a reply streams in, and it stops when the reply ends or this tab
-                goes to the background. Only numbers are sent. Nothing about the scene leaves this page for the device.
+                From now on the device follows the scene: it reacts while a reply streams and, with the hold on, keeps a
+                pace between replies until the scene stops, the tab hides, or you press Stop. Only numbers are sent —
+                the act is read on this page and never leaves it as text.
               </p>
               <div class="panel-actions">
                 <button class="solid-button" id="deviceConfirmYes" type="button">Yes, connect it</button>

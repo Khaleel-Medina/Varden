@@ -3190,6 +3190,20 @@ body.dragging {
 
 /* Troubleshooting that only matters when something is wrong: present, but quiet enough to
    skip while the connection is fine. */
+.device-sustain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.device-sustain input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--teal, #3ad6c6);
+}
+
 .device-tip {
   display: grid;
   gap: 6px;

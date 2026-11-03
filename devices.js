@@ -32,6 +32,9 @@ function handyFirmwareLabel(raw) {
 // seconds instead of leaving it running. An indefinite hold is never sent — that is the
 // whole point of this constant.
 const LOVENSE_HOLD_SEC = 2;
+
+// Sustained motion has a ceiling. A scene can outlast a reply, but never a forgotten tab.
+const SUSTAIN_MAX_MS = 5 * 60 * 1000;
 export const REACTION_TICK_MS = 1500;
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -44,8 +47,105 @@ export function handyHalfPeriod(level) {
 }
 
 // HDSP works in percent of the stroke zone, so a stroke is "be at this end in T ms".
-export function handyStrokeTarget(phase) {
-  return phase ? 100 : 0;
+export function handyStrokeTarget(phase, depth = [0, 100]) {
+  return phase ? depth[1] : depth[0];
+}
+
+/* ---------------- scene tracking ---------------- */
+
+// What the two of them are doing, read off words that have already arrived. Nothing here is
+// sent anywhere: the act only ever leaves this page as the pace and depth it selected.
+const SCENES = {
+  thrust: { label: 'thrusting', half: [300, 520], depth: [0, 100], sustain: 0.55 },
+  oral: { label: 'going down', half: [430, 760], depth: [0, 55], sustain: 0.45 },
+  hands: { label: 'using hands', half: [480, 900], depth: [0, 60], sustain: 0.4 },
+  grind: { label: 'grinding', half: [700, 1100], depth: [15, 80], sustain: 0.5 },
+  tease: { label: 'teasing', half: [900, 1400], depth: [0, 30], sustain: 0.3 },
+};
+
+const SCENE_CUES = {
+  thrust:
+    /\b(dogg(y|ie)|from behind|behind (her|him|me)|missionary|cowgirl|riding|reverse cowgirl|bent over|against the wall|thrust(s|ed|ing)?|pound(s|ed|ing)?|fuck(s|ed|ing)?|ball(s)? deep|spread(s|ing)? (her|his|my) (legs|thighs)|enter(s|ed|ing)? (her|him|me)|inside (her|him|me))\b/i,
+  oral: /\b(blow ?job|suck(s|ed|ing)?|mouth|tongue|lick(s|ed|ing)?|throat|swallow(s|ed|ing)?|go(es|ing)? down on|kneel(s|ing|ed)? (down|between))\b/i,
+  hands:
+    /\b(finger(s|ed|ing)?|hand ?job|jerk(s|ed|ing)? (him|her|me) off|stroke(s|d|ing)? (him|her|me)|palm(s|ed)?|thumb(s)? (over|against))\b/i,
+  grind: /\b(grind(s|ed|ing)?|hump(s|ed|ing)?|rub(s|bed|bing)? (against|on|between)|dry hump|thigh(s)? (between|around))\b/i,
+  tease:
+    /\b(teas(e|es|ed|ing)|kiss(es|ed|ing)?|neck|undress(es|ed|ing)?|strip(s|ped|ping)?|caress(es|ed|ing)?|trail(s|ed|ing)? (a|her|his) (hand|fingers))\b/i,
+};
+
+// A stop cue is a scene change to nothing: it ends motion even if the paragraph also said
+// doggy style, because it came last.
+const SCENE_STOP =
+  /\b(stop(s|ped|ping)?|halt(s|ed|ing)?|pull(s|ed|ing)? out|finish(es|ed|ing)?|done|climb(s|ed|ing)? off|get(s|ting)? off|collapse(s|d)?|catch(es|ing)? (her|his|my) breath|after ?glow|no more|not now)\b/i;
+
+function lastCueIndex(text, pattern) {
+  const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
+  const scan = new RegExp(pattern.source, flags);
+  let best = -1;
+  let match;
+  while ((match = scan.exec(text))) {
+    best = match.index;
+    if (match.index === scan.lastIndex) scan.lastIndex += 1;
+  }
+  return best;
+}
+
+export class Scene {
+  constructor({ now = () => Date.now(), idleMs = 90000 } = {}) {
+    this.now = now;
+    this.idleMs = idleMs;
+    this.act = null;
+    this.lastAt = 0;
+  }
+
+  // Last cue wins, so "takes you from behind, then stops" ends stopped rather than stuck at
+  // the first thing it read.
+  observe(text) {
+    const chunk = String(text || '');
+    if (!chunk) return this.act;
+    let best = null;
+    const stop = lastCueIndex(chunk, SCENE_STOP);
+    if (stop >= 0) best = { act: null, at: stop };
+    for (const [act, pattern] of Object.entries(SCENE_CUES)) {
+      const at = lastCueIndex(chunk, pattern);
+      if (at < 0 || (best && at <= best.at)) continue;
+      best = { act, at };
+    }
+    if (!best) return this.act;
+    this.act = best.act;
+    this.lastAt = this.now();
+    return this.act;
+  }
+
+  get profile() {
+    return this.act ? SCENES[this.act] : null;
+  }
+
+  // Empty once the scene has gone quiet: a label is a claim that motion is being followed.
+  get label() {
+    return this.active ? this.profile.label : '';
+  }
+
+  // A scene goes quiet rather than ending on its own: no cue for a minute and a half and the
+  // device stops, which is the difference between following a scene and leaving it running.
+  get active() {
+    return Boolean(this.profile && this.now() - this.lastAt <= this.idleMs);
+  }
+
+  pace(level) {
+    const half = (this.profile || SCENES.thrust).half;
+    const value = clamp(Number(level) || 0, 0, 1);
+    return Math.max(300, Math.round(half[1] - (half[1] - half[0]) * value));
+  }
+
+  depth() {
+    return (this.profile || SCENES.thrust).depth;
+  }
+
+  sustainLevel() {
+    return (this.profile || SCENES.thrust).sustain;
+  }
 }
 
 async function timedFetch(url, options = {}, ms = 6000) {
@@ -420,6 +520,9 @@ class HandyLink {
     this.level = 0;
     this.phase = false;
     this.strokeTimer = 0;
+    // The scene the controller is tracking, and the level it wants held between replies.
+    this.scene = null;
+    this.hold = 0;
     // Strokes swallow their errors during a reply, so the last one is kept for the test
     // pulse to report instead of a silent no-op.
     this.lastStrokeError = null;
@@ -584,15 +687,19 @@ class HandyLink {
     this.lastStrokeError = null;
     const pump = () => {
       if (!this.stroking) return;
-      const level = typeof this.levelSource === 'function' ? this.levelSource() : this.level;
+      const live = typeof this.levelSource === 'function' ? this.levelSource() : this.level;
+      // Held motion outranks the fading stream: between replies the prose is quiet, but the
+      // scene is still going, so the hold keeps the pace up.
+      const level = Math.max(live, this.hold);
       this.level = level;
       // Quiet text is a pause, not a slow grind: keep checking, do not stroke.
       if (level < 0.1) {
         this.strokeTimer = setTimeout(pump, 300);
         return;
       }
-      const half = handyHalfPeriod(level);
-      const position = handyStrokeTarget(this.phase);
+      const wide = this.scene?.active;
+      const half = wide ? this.scene.pace(level) : handyHalfPeriod(level);
+      const position = handyStrokeTarget(this.phase, wide ? this.scene.depth() : [0, 100]);
       this.phase = !this.phase;
       // One command per half-stroke; a failure costs a single stroke, not the reply.
       // One command per half-stroke; a failure costs a single stroke, not the reply, but it
@@ -620,6 +727,17 @@ class HandyLink {
     pump();
   }
 
+  // Called while motion is held between replies. HAMP still needs a velocity, so it takes the
+  // same path as a stream; HDSP only needs the loop kept alive at this level.
+  setHold(level) {
+    this.hold = clamp(Number(level) || 0, 0, 1);
+    if (this.mode === 'hdsp') {
+      this.startStrokes();
+      return;
+    }
+    return this.setLevel(this.hold);
+  }
+
   stopStrokes() {
     this.stroking = false;
     if (this.strokeTimer) {
@@ -629,6 +747,7 @@ class HandyLink {
   }
 
   async stop() {
+    this.hold = 0;
     this.stopStrokes();
     if (!this.moving && this.activeMode === null) return;
     if (this.moving) this.moving = false;
@@ -655,6 +774,12 @@ export function createDevices({ onStatus } = {}) {
   let muted = false;
   let failures = 0;
   let cap = 0.6;
+  const scene = new Scene();
+  let sustainOn = true;
+  let sustained = false;
+  // Set by Stop, a hidden tab or a disconnect: finish() must not revive motion the visitor
+  // just ended.
+  let suppressed = false;
 
   const report = (text) => {
     try {
@@ -685,10 +810,54 @@ export function createDevices({ onStatus } = {}) {
     }
   };
 
+  function stopNow() {
+    suppressed = true;
+    sustained = false;
+    muted = true;
+    clearInterval(timer);
+    timer = 0;
+    if (link) link.stop().catch(() => {});
+  }
+
+  // Between replies: keep the last pace alive at the scene's own intensity, and stop on a
+  // stop cue, an idle scene, a ceiling, or three failed commands.
+  function startSustain() {
+    const current = link;
+    if (!current) return;
+    sustained = true;
+    muted = false;
+    clearInterval(timer);
+    const startedAt = Date.now();
+    const step = async () => {
+      if (!link || link !== current || !sustained) return;
+      if (!scene.active || Date.now() - startedAt > SUSTAIN_MAX_MS) {
+        stopNow();
+        return;
+      }
+      const level = clamp(scene.sustainLevel() * cap, 0.08, 1);
+      try {
+        // Awaiting matters here: an unawaited rejection would surface as an unhandled
+        // promise instead of a failure this loop can count.
+        if (typeof current.setHold === 'function') await current.setHold(level);
+        else await current.setLevel(level);
+        failures = 0;
+      } catch (error) {
+        failures += 1;
+        if (failures >= 3) {
+          report(`The device stopped answering (${error?.message || error}), so it was stopped.`);
+          stopNow();
+        }
+      }
+    };
+    void step();
+    timer = setInterval(step, REACTION_TICK_MS);
+  }
+
   async function disconnect() {
     clearInterval(timer);
     timer = 0;
     muted = false;
+    sustained = false;
     const current = link;
     link = null;
     reaction = null;
@@ -711,6 +880,11 @@ export function createDevices({ onStatus } = {}) {
     get label() {
       return link?.label || '';
     },
+    // The act currently followed, for the status line. Empty once the scene has stopped or
+    // gone quiet.
+    get sceneLabel() {
+      return scene.active ? scene.label : '';
+    },
 
     async connect(config) {
       await disconnect();
@@ -721,8 +895,12 @@ export function createDevices({ onStatus } = {}) {
       link = chosen;
       reaction = new Reaction({ cap });
       chosen.levelSource = () => reaction.peek();
+      chosen.scene = scene;
+      sustainOn = config.sustain !== false;
       failures = 0;
       muted = false;
+      suppressed = false;
+      sustained = false;
       report('');
       return label;
     },
@@ -730,6 +908,19 @@ export function createDevices({ onStatus } = {}) {
     setCap(percent) {
       cap = clamp(Number(percent) / 100, 0.05, 1);
       if (reaction) reaction.cap = cap;
+    },
+
+    // Turning the hold off mid-scene stops it, rather than waiting for the next reply.
+    setSustain(on) {
+      sustainOn = on !== false;
+      if (!sustainOn && sustained) stopNow();
+    },
+
+    // The visitor's own message counts as the scene speaking: "turn around" has to change the
+    // motion before the model has written a word.
+    noteScene(text) {
+      if (!link) return;
+      scene.observe(text);
     },
 
     // A short pulse, so a connection can be proven before a reply is ever sent. It goes
@@ -759,6 +950,9 @@ export function createDevices({ onStatus } = {}) {
     begin() {
       if (!link) return;
       muted = false;
+      suppressed = false;
+      sustained = false;
+      link.setHold?.(0);
       reaction?.reset();
       void link.start?.();
       clearInterval(timer);
@@ -769,15 +963,24 @@ export function createDevices({ onStatus } = {}) {
 
     feed(delta) {
       if (!link || muted) return;
+      scene.observe(delta);
       reaction?.feed(delta);
     },
 
     // Ends the reply: always stop, never leave the last command holding.
+    // The reply ended. If a scene is still going and the hold is on, keep the pace instead of
+    // going still — that is the whole point of following a scene rather than a stream.
     async finish() {
       clearInterval(timer);
       timer = 0;
       muted = false;
       if (!link) return;
+      if (suppressed) return;
+      if (sustainOn && scene.active) {
+        startSustain();
+        return;
+      }
+      sustained = false;
       try {
         await link.stop();
       } catch {
@@ -786,11 +989,11 @@ export function createDevices({ onStatus } = {}) {
     },
 
     // Tab hidden, Stop pressed, or a route switch: mute until the next reply begins.
-    stopNow() {
-      muted = true;
-      clearInterval(timer);
-      timer = 0;
-      if (link) link.stop().catch(() => {});
+    stopNow,
+
+    // The scene a visitor can see is the scene the device follows.
+    get scene() {
+      return scene.active ? scene.act : null;
     },
 
     disconnect,

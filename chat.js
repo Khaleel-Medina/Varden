@@ -201,6 +201,7 @@ const DEFAULT_SETTINGS = {
     handyMode: 'hamp',
     handyApi: 'auto',
     cap: 60,
+    sustain: true,
     confirmed: false,
   },
 };
@@ -323,6 +324,7 @@ const els = {
   handyModeNote: $('handyModeNote'),
   handyApi: $('handyApi'),
   handyApiNote: $('handyApiNote'),
+  deviceSustain: $('deviceSustain'),
   deviceMax: $('deviceMax'),
   deviceMaxOut: $('deviceMaxOut'),
   deviceConnect: $('deviceConnectBtn'),
@@ -378,6 +380,7 @@ function loadSettings() {
   if (typeof device.handyAppKey !== 'string') device.handyAppKey = '';
   device.handyMode = HANDY_MODES.includes(device.handyMode) ? device.handyMode : 'hamp';
   device.handyApi = HANDY_APIS.includes(device.handyApi) ? device.handyApi : 'auto';
+  device.sustain = device.sustain !== false;
 }
 
 function clampSetting(value, fallback, low = 5, high = 100) {
@@ -1826,7 +1829,7 @@ const DEVICE_CONFIRM_COPY = {
   buttplug:
     'From now on the toy reacts while a reply streams in, and it stops when the reply ends or this tab goes to the background. Commands stay on this computer, inside Intiface — only intensity numbers, never the words.',
   handy:
-    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key (and Application ID on firmware 4), and they carry only speed and position values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
+    'From now on the stroker follows the scene. Commands go through The Handy cloud with your connection key (and Application ID on firmware 4), and they carry only speed and position values — never the words, and the act is read on this page. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
 };
 
 const deviceConfig = () => state.settings.device;
@@ -1885,6 +1888,7 @@ function buildDeviceUi() {
   if (els.handyAppKey) els.handyAppKey.value = config.handyAppKey;
   if (els.deviceMax) els.deviceMax.value = String(config.cap);
   if (els.deviceMaxOut) els.deviceMaxOut.value = String(config.cap);
+  if (els.deviceSustain) els.deviceSustain.checked = config.sustain !== false;
   renderDeviceFields();
   renderDeviceStatus();
 }
@@ -1916,7 +1920,9 @@ function renderDeviceStatus() {
   if (!els.deviceStatus) return;
   const bits = [];
   if (state.devices?.connected) {
-    bits.push(`Connected: ${state.devices.label}. It reacts while a reply streams and stops when the reply ends.`);
+    const scene = state.devices.sceneLabel;
+    const hold = deviceConfig().sustain === false ? 'It moves only while a reply streams.' : 'It follows the scene between replies.';
+    bits.push(`Connected: ${state.devices.label}. ${hold}${scene ? ` Scene: ${scene}.` : ''}`);
   } else if (deviceConfig().kind !== 'off') {
     bits.push('Not connected yet.');
   }
@@ -2001,6 +2007,8 @@ async function sendMessage(rawText) {
   }
   els.input.value = '';
   autoGrowInput();
+  // The visitor's own words steer the scene too, before the model has answered.
+  state.devices?.noteScene(text);
   state.chat.messages.push(createMessage('user', text));
   if (state.chat.messages.filter((message) => message.role === 'user').length === 1) {
     state.chat.title = deriveTitle(text);
@@ -2604,6 +2612,12 @@ function bindEvents() {
     deviceConfig().handyMode = HANDY_MODES.includes(choice) ? choice : 'hamp';
     saveSettings();
     renderHandyModeNote();
+  });
+  els.deviceSustain?.addEventListener('change', () => {
+    deviceConfig().sustain = els.deviceSustain.checked;
+    saveSettings();
+    state.devices?.setSustain(deviceConfig().sustain);
+    renderDeviceStatus();
   });
   els.handyApi?.addEventListener('change', () => {
     const choice = els.handyApi.value;
