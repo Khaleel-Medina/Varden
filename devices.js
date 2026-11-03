@@ -65,7 +65,7 @@ const SCENES = {
 
 const SCENE_CUES = {
   thrust:
-    /\b(dogg(y|ie)|from behind|behind (her|him|me)|missionary|cowgirl|riding|reverse cowgirl|bent over|against the wall|thrust(s|ed|ing)?|pound(s|ed|ing)?|fuck(s|ed|ing)?|ball(s)? deep|spread(s|ing)? (her|his|my) (legs|thighs)|enter(s|ed|ing)? (her|him|me)|inside (her|him|me))\b/i,
+    /\b(dogg(y|ie)|from behind|behind (her|him|me)|missionary|cowgirl|reverse cowgirl|riding|ride(s|d)? (him|her|me)|bent over|bend(s|ing)? (her|him|me)? ?over|against the wall|thrust(s|ed|ing)?|pound(s|ed|ing)?|fuck(s|ed|ing)?|ball(s)? deep|spread(s|ing)? (her|his|my) (legs|thighs)|enter(s|ed|ing)? (her|him|me)|inside (her|him|me))\b/i,
   oral: /\b(blow ?job|suck(s|ed|ing)?|mouth|tongue|lick(s|ed|ing)?|throat|swallow(s|ed|ing)?|go(es|ing)? down on|kneel(s|ing|ed)? (down|between))\b/i,
   hands:
     /\b(finger(s|ed|ing)?|hand ?job|jerk(s|ed|ing)? (him|her|me) off|stroke(s|d|ing)? (him|her|me)|palm(s|ed)?|thumb(s)? (over|against))\b/i,
@@ -78,6 +78,32 @@ const SCENE_CUES = {
 // doggy style, because it came last.
 const SCENE_STOP =
   /\b(stop(s|ped|ping)?|halt(s|ed|ing)?|pull(s|ed|ing)? out|finish(es|ed|ing)?|done|climb(s|ed|ing)? off|get(s|ting)? off|collapse(s|d)?|catch(es|ing)? (her|his|my) breath|after ?glow|no more|not now)\b/i;
+
+// Talking about an act is not doing it. "Can we do doggy style?", "I'd love to try doggy" and
+// "Doggy style sounds nice" all mention the act and none of them is happening, so a clause
+// has to be a statement and contain something actually being done before it can start one.
+const SCENE_QUESTION = /\?\s*$/;
+const SCENE_HEDGE =
+  /\b(can|could|would|should|shall|may|might|wanna|want to|wants to|want me to|thinking about|thought about|in the mood|how about|what if|if (we|you|i)|maybe|perhaps|ever (tried|done)|propos\w*|suggest\w*|ask(s|ed|ing)?|wonder\w*|imagine|question)\b/i;
+const SCENE_ACTION =
+  /\b(take|takes|took|taking|grab|grabs|grabbed|grabbing|pull|pulls|pulled|pulling|push|pushes|pushed|pushing|thrust|thrusts|thrusting|drive|drives|drove|slam|slams|slammed|pound|pounds|pounded|fuck|fucks|fucked|fucking|ride|rides|rode|riding|grind|grinds|grinding|hump|humps|humping|suck|sucks|sucked|sucking|lick|licks|licked|licking|kiss|kisses|kissed|kissing|finger|fingers|fingered|fingering|stroke|strokes|stroked|stroking|palm|palms|touch|touches|touched|touching|slide|slides|slid|sliding|press|presses|pressed|pressing|bend|bends|bent|bending|pin|pins|pinned|lift|lifts|lifted|roll|rolls|rolled|wrap|wraps|wrapped|guide|guides|guided|enter|enters|entered|entering|kneel|kneels|knelt|kneeling|spread|spreads|hold|holds|held|holding|pump|pumps|pumped|pumping|move|moves|moved|moving|buck|bucks|bucked|rock|rocks|rocked|arch|arches|arched|clutch|clutches|clutched|grip|grips|gripped|moan|moans|moaned|groan|groans|groaned|gasp|gasps|gasped)\b/i;
+
+function sceneIsTalk(clause) {
+  return SCENE_QUESTION.test(clause) || SCENE_HEDGE.test(clause);
+}
+
+// The last cue that is actually being performed in this clause, or null when it is only
+// being discussed.
+function sceneCueIn(clause) {
+  if (sceneIsTalk(clause) || !SCENE_ACTION.test(clause)) return null;
+  let best = null;
+  for (const [act, pattern] of Object.entries(SCENE_CUES)) {
+    const at = lastCueIndex(clause, pattern);
+    if (at < 0 || (best && at <= best.at)) continue;
+    best = { act, at };
+  }
+  return best;
+}
 
 function lastCueIndex(text, pattern) {
   const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`;
@@ -112,18 +138,23 @@ export class Scene {
     if (!this.fluid) this.prev = null;
   }
 
-  // Last cue wins, so "takes you from behind, then stops" ends stopped rather than stuck at
-  // the first thing it read.
+  // Last clause wins, and inside a clause the last cue wins, so "takes you from behind, then
+  // stops" ends stopped rather than stuck at the first thing it read. A question about an act
+  // changes nothing, and neither does a sentence that only names one.
   observe(text) {
     const chunk = String(text || '');
     if (!chunk) return this.act;
+    const clauseRe = /[^.!?;\n]+[.!?;]?/g;
     let best = null;
-    const stop = lastCueIndex(chunk, SCENE_STOP);
-    if (stop >= 0) best = { act: null, at: stop };
-    for (const [act, pattern] of Object.entries(SCENE_CUES)) {
-      const at = lastCueIndex(chunk, pattern);
-      if (at < 0 || (best && at <= best.at)) continue;
-      best = { act, at };
+    let match;
+    while ((match = clauseRe.exec(chunk))) {
+      const clause = match[0];
+      const base = match.index;
+      // A question about stopping must not stop anything; a statement about stopping must.
+      const stopAt = SCENE_QUESTION.test(clause) ? -1 : lastCueIndex(clause, SCENE_STOP);
+      const cue = sceneCueIn(clause);
+      if (stopAt >= 0 && (!cue || stopAt >= cue.at)) best = { act: null, at: base + stopAt };
+      else if (cue) best = { act: cue.act, at: base + cue.at };
     }
     if (!best) return this.act;
     if (best.act !== this.act) {
@@ -817,6 +848,9 @@ export function createDevices({ onStatus } = {}) {
   // Set by Stop, a hidden tab or a disconnect: finish() must not revive motion the visitor
   // just ended.
   let suppressed = false;
+  // Streams arrive as fragments, and a scene clause split across two tokens would never parse,
+  // so text is held until it reaches a sentence boundary.
+  let sceneBuffer = '';
 
   const report = (text) => {
     try {
@@ -995,6 +1029,7 @@ export function createDevices({ onStatus } = {}) {
       muted = false;
       suppressed = false;
       sustained = false;
+      sceneBuffer = '';
       link.setHold?.(0);
       reaction?.reset();
       void link.start?.();
@@ -1006,7 +1041,18 @@ export function createDevices({ onStatus } = {}) {
 
     feed(delta) {
       if (!link || muted) return;
-      scene.observe(delta);
+      sceneBuffer += delta;
+      const boundary = Math.max(
+        sceneBuffer.lastIndexOf('.'),
+        sceneBuffer.lastIndexOf('!'),
+        sceneBuffer.lastIndexOf('?'),
+        sceneBuffer.lastIndexOf('\n')
+      );
+      if (boundary >= 0 || sceneBuffer.length > 500) {
+        const cut = boundary >= 0 ? boundary + 1 : sceneBuffer.length;
+        scene.observe(sceneBuffer.slice(0, cut));
+        sceneBuffer = sceneBuffer.slice(cut);
+      }
       reaction?.feed(delta);
     },
 
@@ -1018,6 +1064,12 @@ export function createDevices({ onStatus } = {}) {
       timer = 0;
       muted = false;
       if (!link) return;
+      // A reply can end mid-sentence; the last fragment still counts before deciding whether
+      // to hold or stop.
+      if (sceneBuffer) {
+        scene.observe(sceneBuffer);
+        sceneBuffer = '';
+      }
       if (suppressed) return;
       if (sustainOn && scene.active) {
         startSustain();
