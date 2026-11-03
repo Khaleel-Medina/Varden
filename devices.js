@@ -394,6 +394,9 @@ class HandyLink {
     this.level = 0;
     this.phase = false;
     this.strokeTimer = 0;
+    // Strokes swallow their errors during a reply, so the last one is kept for the test
+    // pulse to report instead of a silent no-op.
+    this.lastStrokeError = null;
   }
 
   headers() {
@@ -480,6 +483,7 @@ class HandyLink {
     if (this.stroking) return;
     this.stroking = true;
     this.moving = false;
+    this.lastStrokeError = null;
     const pump = () => {
       if (!this.stroking) return;
       const level = typeof this.levelSource === 'function' ? this.levelSource() : this.level;
@@ -493,9 +497,17 @@ class HandyLink {
       const position = handyStrokeTarget(this.phase);
       this.phase = !this.phase;
       // One command per half-stroke; a failure costs a single stroke, not the reply.
-      void this.useMode('hdsp').then(() =>
-        this.call('hdsp/xpt', 'PUT', { position, duration: half, stopOnTarget: true }).catch(() => {})
-      );
+      // One command per half-stroke; a failure costs a single stroke, not the reply, but it
+      // is remembered so a test pulse can say what went wrong.
+      void this.useMode('hdsp')
+        .then(() =>
+          this.call('hdsp/xpt', 'PUT', { position, duration: half, stopOnTarget: true }).catch((error) => {
+            this.lastStrokeError = error;
+          })
+        )
+        .catch((error) => {
+          this.lastStrokeError = error;
+        });
       this.strokeTimer = setTimeout(pump, half);
     };
     pump();
@@ -623,14 +635,18 @@ export function createDevices({ onStatus } = {}) {
       // Feed the reaction the intensity a hot sentence would give it, or scene-synced mode
       // would have nothing to stroke to.
       reaction?.feed('*she moans* yes — harder, now! ');
+      let strokeError = null;
       try {
         await target.setLevel(clamp(0.45 * cap, 0.15, 0.6));
         await new Promise((resolve) => setTimeout(resolve, 1400));
+        // Strokes hide their own failures while a reply streams; a test should not.
+        strokeError = target.lastStrokeError || null;
       } finally {
         await target.stop().catch(() => {});
         reaction?.reset();
         report('');
       }
+      if (strokeError) throw strokeError;
     },
 
     begin() {
