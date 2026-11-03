@@ -62,7 +62,7 @@ const SUPABASE_URL = 'https://ljruzruhbqkbxkflrvzi.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqcnV6cnVoYnFrYnhrZmxydnppIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNzExOTIsImV4cCI6MjA5NzY0NzE5Mn0.3nMbB6tYCF9-GZUs3Gu76Z-yVYCQrWOnM3EBcSTZlWg'; // public anon key
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
-console.log('Varden: Supabase client initialized');
+
 
 // Auth helpers (inline to avoid importing from lib/supabase.js)
 async function signUp(email, password, displayName) {
