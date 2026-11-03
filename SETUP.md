@@ -313,9 +313,11 @@ Three transports, because they are genuinely different deals:
 - **Intiface Central (desktop)** — any buttplug.io-compatible toy, connected in Intiface, over
   `ws://127.0.0.1:12345`. Nothing leaves the machine and the localhost exception means no mixed-content problem. Costs
   the visitor a desktop install.
-- **The Handy** — the vendor's cloud, with the visitor's connection key (and an app key on firmware 4). Two API
+- **The Handy** — the vendor's cloud, with the visitor's connection key (and an Application ID on firmware 4). The
+  two credentials are different things and the panel says so: the **Application ID** is built for web pages, the
+  **Application Key** is server-side and the cloud refuses it from a page. Two API
   generations exist and the hardware decides which one answers: **firmware 4** (Handy 2, 2 Pro) only speaks v3 at
-  `https://www.handyfeeling.com/api/handy-rest/v3/` and requires an app key from `user.handyfeeling.com`; **firmware 3**
+  `https://www.handyfeeling.com/api/handy-rest/v3/` and requires an Application ID from `user.handyfeeling.com`; **firmware 3**
   (the original Handy) only speaks v2 at `https://www.handyfeeling.com/api/handy/v2/` and needs no app key. The panel's
   *Cloud API* selector defaults to **Detect**, which tries v3 when a key is present, falls back to v2, and reports what
   it reached (model, firmware, hardware, API) in the connected label. Verified against the live service: both bases

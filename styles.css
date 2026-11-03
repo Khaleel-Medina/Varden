@@ -3188,6 +3188,35 @@ body.dragging {
   color: #b07be0;
 }
 
+/* Troubleshooting that only matters when something is wrong: present, but quiet enough to
+   skip while the connection is fine. */
+.device-tip {
+  display: grid;
+  gap: 6px;
+  padding: 8px 0 8px 12px;
+  border-left: 2px solid var(--line-strong, rgba(255, 255, 255, 0.24));
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+.device-tip strong {
+  color: var(--text, #eef1f7);
+  font-weight: 600;
+}
+
+.device-tip ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.device-tip b {
+  color: var(--text, #eef1f7);
+  font-weight: 600;
+}
+
 .device-confirm {
   margin: 12px 0 4px;
   padding: 12px 14px;

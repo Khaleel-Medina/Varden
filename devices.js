@@ -20,12 +20,12 @@ const HANDY_BASES = {
   v3: 'https://www.handyfeeling.com/api/handy-rest/v3/',
 };
 
-// Firmware reports "430+dcee7e58": a three-digit build number plus a build hash. 430 means
-// 4.3.0, and the hash is noise in a status line.
+// Firmware arrives as "430+dcee7e58" or "4.3.0+dcee7e58": a build number plus a build hash.
+// 430 means 4.3.0, and the hash is noise in a status line.
 function handyFirmwareLabel(raw) {
   const text = String(raw || '').trim();
   const build = text.split('+')[0];
-  return /^\d{3}$/.test(build) ? build.split('').join('.') : text || '';
+  return /^\d{3}$/.test(build) ? build.split('').join('.') : build;
 }
 
 // A Lovense command that expires on its own: a tab that dies stops the toy within two
@@ -469,9 +469,9 @@ class HandyLink {
 
   authMessage() {
     if (this.api === 'v3') {
-      return 'The Handy cloud did not accept that app key. Firmware 4 devices (Handy 2, 2 Pro) need an app key from user.handyfeeling.com as well as the connection key; the Application ID is the one meant for browser code.';
+      return 'The Handy cloud did not accept that Application ID. Firmware 4 devices (Handy 2, 2 Pro) need an Application ID from user.handyfeeling.com as well as the connection key. Paste the ID itself, not the Application Key — the Key is meant for servers.';
     }
-    return 'The Handy rejected those keys. Copy the connection key again from the Handy app; the app key is only needed if the developer portal issued you one.';
+    return 'The Handy rejected that connection key. Copy it again from the Handy app. The original Handy does not use an Application ID at all, so leave that field empty.';
   }
 
   async connect() {
@@ -512,7 +512,7 @@ class HandyLink {
     if (failures.length === 1) return failures[0].message;
     const keyProblem = failures.some((failure) => failure.auth);
     const lead = keyProblem
-      ? 'The cloud refused the app key, so the device was never asked: fix the key before anything else.'
+      ? 'The cloud refused the Application ID, so the device was never asked: fix the ID before anything else.'
       : '';
     const detail = failures.map((failure) => `API ${failure.api}: ${failure.message}`).join(' ');
     return [lead, detail].filter(Boolean).join(' ');
@@ -522,7 +522,7 @@ class HandyLink {
     this.authRejected = false;
     if (this.api === 'v3' && !String(this.config.handyAppKey || '').trim()) {
       throw new Error(
-        'Handy 2 (firmware 4) needs an app key as well: create a free one at user.handyfeeling.com and paste it above.'
+        'Handy 2 (firmware 4) needs an Application ID as well: create a free one at user.handyfeeling.com and paste the ID (not the Application Key) above.'
       );
     }
     const status = await this.call('connected');

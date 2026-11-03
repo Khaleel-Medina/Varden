@@ -1826,7 +1826,7 @@ const DEVICE_CONFIRM_COPY = {
   buttplug:
     'From now on the toy reacts while a reply streams in, and it stops when the reply ends or this tab goes to the background. Commands stay on this computer, inside Intiface — only intensity numbers, never the words.',
   handy:
-    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key (and app key on firmware 4), and they carry only speed and position values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
+    'From now on the stroker reacts while a reply streams in. Commands go through The Handy cloud with your connection key (and Application ID on firmware 4), and they carry only speed and position values — never the words. It cannot be made to expire on its own, so press Stop rather than closing the tab while it runs.',
 };
 
 const deviceConfig = () => state.settings.device;
@@ -1839,9 +1839,9 @@ const HANDY_MODES = ['hamp', 'hdsp'];
 const HANDY_APIS = ['auto', 'v3', 'v2'];
 
 const HANDY_API_COPY = {
-  auto: 'Detect: with an app key it tries API v3 first and falls back to v2; without one it goes straight to v2, which is all the original Handy uses.',
-  v3: 'API v3 only: firmware 4 hardware — Handy 2 and 2 Pro. The connection key and an app key from user.handyfeeling.com are both required.',
-  v2: 'API v2 only: the original Handy on firmware 3. The connection key is enough; an app key is ignored here.',
+  auto: 'Detect: with an Application ID it tries API v3 first and falls back to v2; without one it goes straight to v2, which is all the original Handy uses.',
+  v3: 'API v3 only: firmware 4 hardware — Handy 2 and 2 Pro. The connection key and an Application ID from user.handyfeeling.com are both required.',
+  v2: 'API v2 only: the original Handy on firmware 3. The connection key is enough; the Application ID is ignored here.',
 };
 
 function renderHandyApiNote() {
@@ -1948,7 +1948,9 @@ async function connectDevice() {
   setDeviceStatus('Looking for the device…');
   try {
     const label = await state.devices.connect({ ...config, pageProtocol: window.location.protocol });
-    setDeviceStatus(`Connected to ${label}.`);
+    // renderDeviceStatus already opens with "Connected: <label>", so adding it here too
+    // printed the same sentence twice.
+    setDeviceStatus('');
   } catch (error) {
     setDeviceStatus(String(error?.message || error || 'Could not connect to the device.'));
     console.warn('Varden: device connect failed', error);

@@ -267,8 +267,8 @@
                 <input id="handyKey" type="password" autocomplete="off" spellcheck="false" placeholder="from the Handy app" />
               </label>
               <label class="field">
-                App key <span class="field-hint">needed by Handy 2 · free at user.handyfeeling.com</span>
-                <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional for the original Handy" />
+                Application ID <span class="field-hint">needed by Handy 2 · free at user.handyfeeling.com</span>
+                <input id="handyAppKey" type="password" autocomplete="off" spellcheck="false" placeholder="the Application ID, not the Application Key" />
               </label>
               <label class="field">
                 Cloud API
@@ -287,6 +287,30 @@
                 </select>
               </label>
               <p class="field-note" id="handyModeNote"></p>
+              <div class="device-tip">
+                <strong>If it will not connect</strong>
+                <ul>
+                  <li>
+                    <b>Handy 2:</b> the Wi-Fi light has to be connected. Cloud control reaches the device over
+                    Wi-Fi, so Bluetooth alone is not enough — Bluetooth only serves the Handy app.
+                  </li>
+                  <li>
+                    <b>Application ID, not Application Key:</b> they are two different credentials. The ID is the one
+                    made for web pages; the Key is server-side and the cloud will refuse it here.
+                  </li>
+                  <li>
+                    <b>Connection key:</b> copy it fresh from the Handy app — it changes when the device is re-paired.
+                  </li>
+                  <li>
+                    <b>Original Handy:</b> leave the API on Detect and the Application ID empty; firmware 3 needs
+                    neither.
+                  </li>
+                  <li>
+                    Still stuck? The line under the buttons names the half that failed — the cloud refusing the
+                    Application ID, or the cloud not reaching the device.
+                  </li>
+                </ul>
+              </div>
               <p class="field-note">
                 Unlike the two above, The Handy is driven through its vendor's cloud, so commands travel over the
                 internet and the connection key identifies your device to them. Still only intensity, speed and
