@@ -271,6 +271,7 @@ const els = {
   genStatus: $('genStatus'),
   genText: $('genText'),
   genBar: $('genBar'),
+  composerHint: $('composerHint'),
   exportChat: $('exportChatBtn'),
   personaDialog: $('personaDialog'),
   personaForm: $('personaForm'),
@@ -1493,6 +1494,16 @@ function syncModelChip() {
     els.modelChip.textContent = 'Model not loaded';
     delete els.modelChip.dataset.state;
   }
+  // The hint under the box promised "runs on your GPU" on every route, which is exactly
+  // the thing a visitor switching to a remote model needs to be told otherwise about.
+  const route = keylessActive()
+    ? 'replies come from the shared pool'
+    : hostedActive()
+      ? 'replies come from the hosted provider'
+      : localActive()
+        ? 'replies come from your server'
+        : 'runs on your GPU';
+  if (els.composerHint) els.composerHint.textContent = `Enter sends · Shift + Enter adds a line · ${route}`;
   // Unload is about the GPU engine, which stays loaded while a remote route answers.
   els.unloadModel.disabled = !state.engine || state.loading;
 }
