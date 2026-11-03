@@ -167,6 +167,38 @@
           <p class="field-note keyless-status" id="keylessStatus" role="status"></p>
         </section>
 
+        <section class="panel-block local-block">
+          <p class="eyebrow">Own server <span class="local-badge">no account · your machine</span></p>
+          <p class="field-note">
+            A fourth route for anyone running Ollama, LM Studio, llama.cpp or vLLM: point Varden at it and the scene
+            goes to that address and nowhere else. No account, no bill, and the only remote route that can use a truly
+            uncensored model — the five Hermes and OpenHermes entries in the GPU list are the local equivalents.
+          </p>
+          <label class="field">
+            Server address <span class="field-hint">/v1 is added if you leave it off</span>
+            <input id="localBase" type="text" autocomplete="off" spellcheck="false" placeholder="http://127.0.0.1:11434" />
+          </label>
+          <label class="field">
+            Model name <span class="field-hint">Find models asks the server</span>
+            <input id="localModel" type="text" autocomplete="off" spellcheck="false" list="localModelList" placeholder="dolphin-mistral:latest" />
+            <datalist id="localModelList"></datalist>
+          </label>
+          <label class="field">
+            Server key <span class="field-hint">only if yours requires one</span>
+            <input id="localKey" type="password" autocomplete="off" spellcheck="false" placeholder="optional" />
+          </label>
+          <div class="panel-actions">
+            <button class="solid-button" id="localUseBtn" type="button">Use this server</button>
+            <button class="ghost-button" id="localFindBtn" type="button">Find models</button>
+          </div>
+          <p class="field-note">
+            The server must allow this page's origin (Ollama: <code>OLLAMA_ORIGINS</code>) and your browser may ask once
+            for permission to reach your local network. The key, if you use one, stays in this tab only. Local GPU
+            inference is still the only route where nothing leaves the machine at all.
+          </p>
+          <p class="field-note local-status" id="localStatus" role="status"></p>
+        </section>
+
         <section class="panel-block device-block">
           <p class="eyebrow">Devices <span class="device-badge">optional</span></p>
           <p class="field-note">
@@ -307,8 +339,8 @@
 
         <p class="panel-foot">
           Local models, cards and chats live in this browser: nothing is uploaded and there is no message cap. Hosted
-          models send the scene to the provider whose key you use; the keyless pool sends it to a shared free endpoint.
-          A connected device only ever receives intensity numbers.
+          models send the scene to the provider whose key you use; the keyless pool sends it to a shared free endpoint;
+          your own server sends it to the address you typed. A connected device only ever receives intensity numbers.
         </p>
       </aside>
     </div>

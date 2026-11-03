@@ -170,6 +170,13 @@ const vendorLabel = (slug) =>
 const KEYLESS_BASE = 'https://text.pollinations.ai';
 const KEYLESS_FALLBACK = ['openai-fast'];
 
+/* ---------------- own server (anything OpenAI-compatible) ---------------- */
+
+// A fourth route, and the only remote one that can run a genuinely uncensored model
+// without an account: the address is whatever the visitor runs. Ollama and LM Studio
+// both speak this dialect, so one small block covers both.
+const LOCAL_DEFAULT_BASE = 'http://127.0.0.1:11434';
+
 const DEFAULT_SETTINGS = {
   modelId: DEFAULT_MODEL,
   temperature: 0.85,
@@ -180,6 +187,8 @@ const DEFAULT_SETTINGS = {
   hostedModel: null,
   keylessModel: null,
   keylessConfirmed: false,
+  localBase: LOCAL_DEFAULT_BASE,
+  localModel: null,
   device: {
     kind: 'off',
     lovenseHost: '',
@@ -214,6 +223,9 @@ const state = {
   hosted: { key: '', models: [], loading: false, error: null, status: '' },
   hostedAbort: null,
   keyless: { models: [], loading: false, error: null, status: '' },
+  // The key is the one thing here that is never written to localStorage: a server key
+  // is a secret, and this route is meant to work without one anyway.
+  local: { key: '', models: [], loading: false, error: null, status: '' },
   devices: null,
   deviceStatus: '',
 };
@@ -284,6 +296,13 @@ const els = {
   keylessConfirm: $('keylessConfirm'),
   keylessConfirmYes: $('keylessConfirmYes'),
   keylessConfirmCancel: $('keylessConfirmCancel'),
+  localBase: $('localBase'),
+  localModel: $('localModel'),
+  localKey: $('localKey'),
+  localModelList: $('localModelList'),
+  localUse: $('localUseBtn'),
+  localFind: $('localFindBtn'),
+  localStatus: $('localStatus'),
   deviceKind: $('deviceKind'),
   deviceFieldsLovense: $('deviceFieldsLovense'),
   deviceFieldsButtplug: $('deviceFieldsButtplug'),
@@ -325,6 +344,10 @@ function loadSettings() {
   }
   if (typeof state.settings.keylessModel !== 'string' || !state.settings.keylessModel.trim()) {
     state.settings.keylessModel = null;
+  }
+  state.settings.localBase = normalizeLocalBase(state.settings.localBase);
+  if (typeof state.settings.localModel !== 'string' || !state.settings.localModel.trim()) {
+    state.settings.localModel = null;
   }
   // A remembered route only survives if it was confirmed once. Without this, a new
   // session could start shipping scenes off the device that was never asked.
@@ -530,6 +553,143 @@ async function* hostedStream(prompt) {
   yield* sseChunks(response, controller);
 }
 
+/* ---------------- own server plumbing ---------------- */
+
+// "127.0.0.1:11434", "http://localhost:1234/v1" and a pasted full completion URL all
+// collapse to one shape, so the two inputs never disagree about where requests go.
+function normalizeLocalBase(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return LOCAL_DEFAULT_BASE;
+  let url;
+  try {
+    url = new URL(raw.includes('://') ? raw : `http://${raw}`);
+  } catch {
+    return LOCAL_DEFAULT_BASE;
+  }
+  if (!/^https?:$/.test(url.protocol)) return LOCAL_DEFAULT_BASE;
+  let path = url.pathname.replace(/\/+$/, '');
+  if (/\/chat\/completions$/.test(path)) path = path.replace(/\/chat\/completions$/, '');
+  // Ollama and LM Studio both keep the OpenAI shape under /v1.
+  if (!path) path = '/v1';
+  return `${url.origin}${path}`;
+}
+
+const localActive = () => Boolean(state.settings.localModel);
+const localLabel = () => state.settings.localModel || 'Your server';
+const localBase = () => normalizeLocalBase(state.settings.localBase);
+const localEndpoint = (path) => `${localBase()}${path}`;
+
+function syncLocalFields() {
+  if (els.localBase) els.localBase.value = localBase();
+  if (els.localModel) els.localModel.value = state.settings.localModel || '';
+  renderLocalModelList();
+}
+
+function renderLocalModelList() {
+  if (!els.localModelList) return;
+  els.localModelList.replaceChildren(
+    ...state.local.models.map((id) => {
+      const option = document.createElement('option');
+      option.value = id;
+      return option;
+    })
+  );
+}
+
+function renderLocalStatus() {
+  if (!els.localStatus) return;
+  const bits = [];
+  if (localActive()) {
+    bits.push(
+      `Active: ${localLabel()} on ${localBase()}. Replies come from that process and pass through no one else — if that address is not your own machine, the scene leaves your network.`
+    );
+  }
+  if (state.local.loading) bits.push('Asking the server what it can run…');
+  if (state.local.error) bits.push(state.local.error);
+  if (state.local.status) bits.push(state.local.status);
+  if (!bits.length) {
+    bits.push('Type the address, press Find models, then Use this server. Nothing is sent until you do.');
+  }
+  els.localStatus.textContent = bits.join(' ');
+  syncControls();
+}
+
+async function findLocalModels() {
+  if (state.local.loading) return;
+  state.local.loading = true;
+  state.local.error = null;
+  state.local.status = '';
+  renderLocalStatus();
+  try {
+    const headers = { Accept: 'application/json' };
+    if (state.local.key) headers.Authorization = `Bearer ${state.local.key}`;
+    const response = await fetch(localEndpoint('/models'), { headers });
+    if (!response.ok) throw new Error(`it answered ${response.status}`);
+    const payload = await response.json();
+    const list = (Array.isArray(payload) ? payload : payload?.data || payload?.models || [])
+      .map((entry) => (typeof entry === 'string' ? entry : entry?.id || entry?.name))
+      .filter((id) => typeof id === 'string' && id.trim());
+    const models = [...new Set(list)];
+    if (!models.length) throw new Error('it listed no models');
+    state.local.models = models;
+    renderLocalModelList();
+    if (els.localModel && !els.localModel.value.trim()) els.localModel.value = models[0];
+    state.local.status = `${models.length} model${models.length === 1 ? '' : 's'} found: pick one above and press Use this server.`;
+  } catch (error) {
+    state.local.error =
+      `Could not read the model list (${error?.message || error}). That is usually CORS — the server has to allow this page's origin — or the server is not running. You can still type the model name yourself.`;
+  } finally {
+    state.local.loading = false;
+    renderLocalStatus();
+  }
+}
+
+function activateLocal(model) {
+  state.settings.localBase = normalizeLocalBase(els.localBase?.value || state.settings.localBase);
+  state.settings.localModel = String(model || '').trim() || null;
+  // Exactly one route at a time, so a hosted key is never quietly used instead.
+  state.settings.hostedModel = null;
+  state.settings.keylessModel = null;
+  state.hosted.status = '';
+  state.keyless.status = '';
+  state.local.status = '';
+  state.local.error = null;
+  setKeylessConfirm(false);
+  if (els.localBase) els.localBase.value = state.settings.localBase;
+  saveSettings();
+  syncModelChip();
+  renderHostedStatus();
+  renderKeylessStatus();
+  renderLocalStatus();
+  els.notice.hidden = true;
+}
+
+async function* localStream(prompt) {
+  const controller = new AbortController();
+  state.hostedAbort = controller;
+  const headers = { 'Content-Type': 'application/json', Accept: 'text/event-stream' };
+  if (state.local.key) headers.Authorization = `Bearer ${state.local.key}`;
+  const response = await fetch(localEndpoint('/chat/completions'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model: state.settings.localModel,
+      messages: prompt.messages,
+      stream: true,
+      temperature: Number(state.settings.temperature),
+      top_p: Number(state.settings.topP),
+      max_tokens: Number(state.settings.maxTokens),
+    }),
+    signal: controller.signal,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => '');
+    throw new Error(`Local server failed (${response.status}) ${detail.slice(0, 300)}`.trim());
+  }
+  if (!response.body) throw new Error('Your server returned no stream. It has to support stream: true.');
+  yield* sseChunks(response, controller);
+}
+
 /* ---------------- keyless pool plumbing ---------------- */
 
 const keylessActive = () => Boolean(state.settings.keylessModel);
@@ -602,12 +762,15 @@ function activateKeyless(id) {
   state.settings.keylessModel = id;
   // Exactly one route at a time, so a hosted key is never quietly used instead.
   state.settings.hostedModel = null;
+  state.settings.localModel = null;
   state.keyless.status = '';
   state.hosted.status = '';
+  state.local.status = '';
   saveSettings();
   syncModelChip();
   renderHostedStatus();
   renderKeylessStatus();
+  renderLocalStatus();
   els.notice.hidden = true;
   setKeylessConfirm(false);
 }
@@ -1319,9 +1482,10 @@ function syncModelChip() {
   if (hostedActive()) {
     els.modelChip.textContent = `${hostedModelLabel()} · hosted`;
     els.modelChip.dataset.state = 'ready';
-    return;
-  }
-  if (state.engine && state.engineModel) {
+  } else if (localActive()) {
+    els.modelChip.textContent = `${localLabel()} · your server`;
+    els.modelChip.dataset.state = 'ready';
+  } else if (state.engine && state.engineModel) {
     const model = MODEL_CATALOG.find((item) => item.id === state.engineModel);
     els.modelChip.textContent = `${model ? model.label : state.engineModel} · loaded`;
     els.modelChip.dataset.state = 'ready';
@@ -1329,6 +1493,7 @@ function syncModelChip() {
     els.modelChip.textContent = 'Model not loaded';
     delete els.modelChip.dataset.state;
   }
+  // Unload is about the GPU engine, which stays loaded while a remote route answers.
   els.unloadModel.disabled = !state.engine || state.loading;
 }
 
@@ -1441,7 +1606,14 @@ function describeError(error) {
     return 'The WebGPU device was closed by the browser, usually from running out of GPU memory. Load the smallest model and try again; the previous engine cannot be reused.';
   }
   if (/Keyless request failed \(402\)/i.test(message)) {
-    return 'That free alias now wants payment. Pick another alias from the keyless list, or switch to a hosted model with your own key.';
+    return 'The free pool is at its limit: it allows one reply every 45 seconds per address, and the alias has to be one of the anonymous ones. Wait a minute and send again, or switch to a local model.';
+  }
+  if (/Local server failed \((\d+)\)/i.test(message)) {
+    const status = message.match(/Local server failed \((\d+)\)/i)[1];
+    if (status === '404') {
+      return 'Your server does not have that model. Press Find models, pick one from the list, and try again.';
+    }
+    return `Your own server refused the request (${status}). ${message.slice(0, 200)}`;
   }
   if (/Keyless request failed \(429\)|queue is full/i.test(message)) {
     return 'The shared free endpoint is busy right now. Wait a moment and send again, or switch to a local model.';
@@ -1472,6 +1644,9 @@ function describeError(error) {
     return 'The GPU ran out of memory. Try a smaller model, or start a fresh chat to shorten the context.';
   }
   if (/device.?lost|lost device/i.test(message)) return 'The GPU device was lost. Unload the model and load it again.';
+  if (/Failed to fetch|NetworkError|Load failed|net::/i.test(message) && localActive()) {
+    return 'The page could not reach your server. Check it is running at that address, that it allows this page\u2019s origin (OLLAMA_ORIGINS, or LM Studio\u2019s CORS switch), and that the browser\u2019s local-network prompt was accepted. From an https page only localhost addresses are allowed over plain http.';
+  }
   if (/Failed to fetch|network|net::/i.test(message) && hostedActive()) {
     return 'The request to the hosted provider did not go through. Check your connection and that the key is still valid, then try again.';
   }
@@ -1610,7 +1785,7 @@ async function connectDevice() {
 
 function syncControls() {
   const busy = state.generating;
-  const ready = Boolean(state.webgpu?.ok) || hostedActive() || keylessActive();
+  const ready = Boolean(state.webgpu?.ok) || hostedActive() || keylessActive() || localActive();
   els.send.disabled = busy || !ready;
   els.continue.disabled = busy || !ready || !state.chat?.messages.some((message) => message.role === 'assistant');
   els.stop.hidden = !busy;
@@ -1638,7 +1813,7 @@ async function sendMessage(rawText) {
   if (state.generating || !state.chat) return;
   const text = String(rawText || '').trim();
   if (!text) return;
-  if (!state.webgpu?.ok && !hostedActive() && !keylessActive()) {
+  if (!state.webgpu?.ok && !hostedActive() && !keylessActive() && !localActive()) {
     els.notice.hidden = false;
     els.notice.textContent =
       state.webgpu?.message ||
@@ -1722,12 +1897,16 @@ async function generate({ mode = 'reply', index = null } = {}) {
       ? keylessStream(prompt)
       : hostedActive()
         ? hostedStream(prompt)
-        : await createLocalStream(prompt);
+        : localActive()
+          ? localStream(prompt)
+          : await createLocalStream(prompt);
 
     state.devices?.begin();
     els.genStatus.hidden = false;
     els.genStatus.classList.add('busy');
-    els.genText.textContent = keylessActive()
+    els.genText.textContent = localActive()
+      ? `Generating on your own server · ${localLabel()}`
+      : keylessActive()
       ? `Generating on the shared free endpoint · ${keylessLabel()}`
       : hostedActive()
       ? `Generating with ${hostedModelLabel()} · billed to your key`
@@ -2072,11 +2251,13 @@ function bindEvents() {
 
   els.modelSelect.addEventListener('change', () => {
     state.settings.modelId = els.modelSelect.value;
-    // Choosing from the GPU list is also how you switch back from either remote list.
+    // Choosing from the GPU list is also how you switch back from any other route.
     state.settings.hostedModel = null;
     state.settings.keylessModel = null;
+    state.settings.localModel = null;
     state.hosted.status = '';
     state.keyless.status = '';
+    state.local.status = '';
     setKeylessConfirm(false);
     saveSettings();
     updateModelNote();
@@ -2084,6 +2265,7 @@ function bindEvents() {
     syncControls();
     renderHostedStatus();
     renderKeylessStatus();
+    renderLocalStatus();
   });
 
   els.hostedSelect?.addEventListener('change', renderHostedNote);
@@ -2114,13 +2296,16 @@ function bindEvents() {
     }
     state.settings.hostedModel = id;
     state.settings.keylessModel = null;
+    state.settings.localModel = null;
     state.hosted.status = '';
     state.keyless.status = '';
+    state.local.status = '';
     setKeylessConfirm(false);
     saveSettings();
     syncModelChip();
     renderHostedStatus();
     renderKeylessStatus();
+    renderLocalStatus();
     els.notice.hidden = true;
   });
   els.hostedForget?.addEventListener('click', () => {
@@ -2168,6 +2353,43 @@ function bindEvents() {
   els.keylessRefresh?.addEventListener('click', () => {
     state.keyless.status = '';
     loadKeylessModels();
+  });
+
+  els.localKey?.addEventListener('input', () => {
+    // Kept for this tab only: a server key is a secret and this route is meant to run
+    // without one, so it never goes near localStorage.
+    state.local.key = els.localKey.value.trim();
+  });
+  els.localBase?.addEventListener('change', () => {
+    const next = normalizeLocalBase(els.localBase.value);
+    if (els.localBase.value !== next) els.localBase.value = next;
+    if (next === state.settings.localBase) return;
+    state.settings.localBase = next;
+    // A different address is a different route, so the old one is dropped rather than
+    // quietly pointed somewhere the visitor did not choose.
+    if (state.settings.localModel) {
+      state.settings.localModel = null;
+      state.local.models = [];
+      renderLocalModelList();
+      state.local.status = 'Address changed, so the old route was dropped. Press Find models, then Use this server.';
+    }
+    saveSettings();
+    syncModelChip();
+    syncControls();
+    renderLocalStatus();
+  });
+  els.localFind?.addEventListener('click', () => {
+    void findLocalModels();
+  });
+  els.localUse?.addEventListener('click', () => {
+    const model = els.localModel.value.trim();
+    if (!model) {
+      state.local.status = 'Name the model your server is running, then press this again.';
+      renderLocalStatus();
+      els.localModel.focus();
+      return;
+    }
+    activateLocal(model);
   });
 
   els.deviceKind?.addEventListener('change', () => {
@@ -2349,8 +2571,11 @@ async function init() {
   renderGpuState();
   renderHostedStatus();
   renderKeylessStatus();
+  syncLocalFields();
+  renderLocalStatus();
   // Both catalogs are public requests with no credentials, so they load even when
-  // WebGPU is missing entirely.
+  // WebGPU is missing entirely. The server list is not fetched here: it is only ever
+  // asked when the visitor presses Find models.
   setTimeout(() => {
     loadHostedModels();
     loadKeylessModels();

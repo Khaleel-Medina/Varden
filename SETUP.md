@@ -239,6 +239,31 @@ because its promise is different: it works with no key and no account, but it is
 
 Nothing here is billed to the owner and nothing needs maintaining: no key, no server, no account.
 
+## Own server (Ollama, LM Studio, llama.cpp, vLLM)
+
+The chat panel has a fourth model route: an OpenAI-compatible server the visitor runs. It is the only remote route
+that can run a genuinely uncensored model with no account, because the model is whatever they already pulled.
+
+- **Address** — `http://127.0.0.1:11434` by default. `normalizeLocalBase` accepts `host:port`, a bare origin, a
+  `/v1` URL or a pasted `/chat/completions` URL and collapses them to one shape, adding `/v1` when the path is empty.
+  Changing the address while it is active drops the route instead of silently pointing it elsewhere.
+- **Model** — typed, or filled from `GET {base}/models` by **Find models**. Listing is a convenience: CORS often blocks
+  it while chat still works, so a typed name always wins.
+- **Key** — optional, kept in `state.local.key` and never written to `localStorage`. This route is meant to need none.
+- **Streaming** — `POST {base}/chat/completions` with `stream: true`, read by the same `sseChunks` reader as the other
+  two remote routes, and abortable with Stop through the shared `state.hostedAbort`.
+- **Running one, for the record:** `ollama serve` (with `OLLAMA_ORIGINS` including the page origin) then
+  `ollama pull dolphin-mistral`; or LM Studio's server tab with CORS enabled. Ollama exposes the OpenAI shape under
+  `/v1`; LM Studio listens on `http://127.0.0.1:1234`. `dolphin-mistral`, `hermes3:8b` and `dolphin3` are the usual
+  uncensored picks.
+- **Browser limits that will bite before the code does:** the server must answer `OPTIONS` with CORS headers for this
+  origin, and Chrome's Local Network Access prompt (and, from an https page, mixed-content rules) decide whether the
+  request leaves the tab at all. Errors are reported as the route's own words: a failed fetch names CORS and the
+  local-network prompt rather than claiming the model failed.
+- **Not verified end to end here:** no Ollama or LM Studio instance exists in the build environment, so the route was
+  exercised against a stub server on loopback that speaks the same protocol. The real-server path, including the
+  CORS and local-network browser behaviour, still needs a human with a running server.
+
 ## Devices (optional hardware, off by default)
 
 The **Devices** section in the chat panel can drive a toy while a reply streams. It is collapsed, off, and changes

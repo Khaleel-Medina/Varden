@@ -3063,6 +3063,41 @@ body.dragging {
   margin-top: 0;
 }
 
+/* A server the visitor runs is a different promise from the amber pool: no key, no
+   stranger in the middle, just an address they typed. Green keeps that clear. */
+.local-block {
+  border-left: 2px solid #6fbf8f;
+  padding-left: 14px;
+}
+
+.local-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(111, 191, 143, 0.16);
+  color: #6fbf8f;
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.local-block .panel-actions {
+  flex-wrap: wrap;
+}
+
+.local-block code {
+  font-size: 0.78em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--soft);
+}
+
+.local-status {
+  color: #6fbf8f;
+}
+
 /* Devices: neither a model route nor a privacy trade-off, so it gets its own colour
    rather than borrowing the teal or the amber. Collapsed by default — nobody should
    meet hardware setup unless they went looking for it. */
