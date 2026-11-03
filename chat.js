@@ -486,7 +486,8 @@ function speak(text, button) {
 // One place decides what happens when a reply finishes: the chime for everyone, the
 // reading only for those who asked for it, and neither for an empty or failed reply.
 function announceReply(message, text) {
-  if (message?.error || !String(text || '').trim()) return;
+  // A reply the visitor stopped on purpose never landed, so it must not chime.
+  if (message?.error || message?.stopped || !String(text || '').trim()) return;
   playChime();
   if (state.settings.speakReplies) speak(text, null);
 }
@@ -1342,7 +1343,8 @@ function messageActions(message, index) {
   }
 
   add('copy', 'Copy');
-  if (message.role === 'assistant') add('speak', 'Read', 'Read this reply aloud');
+  // Reading a failure notice aloud is noise, not narration.
+  if (message.role === 'assistant' && !message.error) add('speak', 'Read', 'Read this reply aloud');
   add('edit', 'Edit');
   if (message.role === 'assistant') add('regen', 'Regenerate');
   add('delete', 'Delete', 'Delete this message');
