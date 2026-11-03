@@ -433,7 +433,12 @@ class HandyLink {
       throw new Error('The Handy did not report itself online. Check the key, and that the device is switched on and connected.');
     }
     const info = await this.call('info').catch(() => null);
-    this.label = info?.model ? `The Handy (${info.model})` : 'The Handy';
+    // The model and firmware matter: HDSP needs firmware 3 or newer, and a Handy 1 still on
+    // firmware 2 rejects it outright, so show what we actually reached.
+    const fw = String(info?.firmwareVersion || info?.fwVersion || info?.version || '').trim();
+    const model = String(info?.model || '').trim();
+    const seen = [model, fw ? `FW ${fw}` : ''].filter(Boolean);
+    this.label = seen.length ? `The Handy (${seen.join(', ')})` : 'The Handy';
     await this.useMode(this.mode);
     return this.label;
   }
@@ -606,6 +611,26 @@ export function createDevices({ onStatus } = {}) {
     setCap(percent) {
       cap = clamp(Number(percent) / 100, 0.05, 1);
       if (reaction) reaction.cap = cap;
+    },
+
+    // A short pulse, so a connection can be proven before a reply is ever sent. It goes
+    // through the same setLevel/stop path as the stream, so it tests the real commands.
+    async pulse() {
+      const target = link;
+      if (!target) throw new Error('Connect a device first.');
+      muted = false;
+      reaction?.reset();
+      // Feed the reaction the intensity a hot sentence would give it, or scene-synced mode
+      // would have nothing to stroke to.
+      reaction?.feed('*she moans* yes — harder, now! ');
+      try {
+        await target.setLevel(clamp(0.45 * cap, 0.15, 0.6));
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+      } finally {
+        await target.stop().catch(() => {});
+        reaction?.reset();
+        report('');
+      }
     },
 
     begin() {

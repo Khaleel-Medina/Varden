@@ -299,6 +299,7 @@ const els = {
   deviceMaxOut: $('deviceMaxOut'),
   deviceConnect: $('deviceConnectBtn'),
   deviceStop: $('deviceStopBtn'),
+  deviceTest: $('deviceTestBtn'),
   deviceDisconnect: $('deviceDisconnectBtn'),
   deviceConfirm: $('deviceConfirm'),
   deviceConfirmBody: $('deviceConfirmBody'),
@@ -1554,6 +1555,7 @@ function syncDeviceControls() {
   const connected = Boolean(state.devices?.connected);
   if (els.deviceConnect) els.deviceConnect.disabled = connected;
   if (els.deviceStop) els.deviceStop.disabled = !connected;
+  if (els.deviceTest) els.deviceTest.disabled = !connected || state.deviceTesting === true;
   if (els.deviceDisconnect) els.deviceDisconnect.disabled = !connected;
   if (els.deviceKind) els.deviceKind.disabled = connected;
   // The mode is sent once at connect, so changing it mid-session would be a lie.
@@ -2217,6 +2219,24 @@ function bindEvents() {
   els.deviceStop?.addEventListener('click', () => {
     state.devices?.stopNow();
     setDeviceStatus('Stopped.');
+  });
+  els.deviceTest?.addEventListener('click', () => {
+    void (async () => {
+      if (state.deviceTesting) return;
+      state.deviceTesting = true;
+      syncDeviceControls();
+      setDeviceStatus('Sending a one-second test pulse…');
+      try {
+        await state.devices?.pulse();
+        setDeviceStatus('Test pulse finished. If nothing moved, check the device is on and not in a mode of its own.');
+      } catch (error) {
+        setDeviceStatus(String(error?.message || error || 'The test pulse failed.'));
+        console.warn('Varden: device test failed', error);
+      } finally {
+        state.deviceTesting = false;
+        renderDeviceStatus();
+      }
+    })();
   });
   els.deviceDisconnect?.addEventListener('click', () => {
     void (async () => {
