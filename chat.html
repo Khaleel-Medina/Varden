@@ -68,6 +68,7 @@
         </header>
 
         <p class="chat-notice" id="notice" hidden></p>
+        <p class="chat-notice" id="bootError" hidden></p>
 
         <section class="thread" id="thread" aria-live="polite" aria-label="Conversation"></section>
 
@@ -337,6 +338,29 @@
       </form>
     </dialog>
 
+    <script>
+      // A module that fails to load leaves this page looking empty with no clue why,
+      // so say what broke instead of going quiet.
+      (function () {
+        var box = document.getElementById('bootError');
+        function report(detail) {
+          if (!box) return;
+          box.hidden = false;
+          box.textContent =
+            'Varden could not start: ' + detail +
+            ' Hard-reload this page (Ctrl or Cmd + Shift + R); if it still fails, clear this site\u2019s cached files.';
+        }
+        window.addEventListener('error', function (event) {
+          var target = event.target;
+          if (target && target !== window && target.tagName === 'SCRIPT') {
+            var name = (target.src || '').split('/').pop() || 'a script';
+            report(name + ' failed to load or could not start.');
+            return;
+          }
+          if (event.message) report(event.message + '.');
+        }, true);
+      })();
+    </script>
     <script type="module" src="./chat.js"></script>
   </body>
 </html>
