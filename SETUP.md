@@ -318,7 +318,8 @@ Three transports, because they are genuinely different deals:
   **Application Key** is server-side and the cloud refuses it from a page. Two API
   generations exist and the hardware decides which one answers: **firmware 4** (Handy 2, 2 Pro) only speaks v3 at
   `https://www.handyfeeling.com/api/handy-rest/v3/` and requires an Application ID from `user.handyfeeling.com`; **firmware 3**
-  (the original Handy) only speaks v2 at `https://www.handyfeeling.com/api/handy/v2/` and needs no app key. The panel's
+  (the original Handy) only speaks v2 at `https://www.handyfeeling.com/api/handy/v2/` and needs no Application ID. The
+  panel's
   *Cloud API* selector defaults to **Detect**, which tries v3 when a key is present, falls back to v2, and reports what
   it reached (model, firmware, hardware, API) in the connected label. Verified against the live service: both bases
   answer this site's origin on preflight with `x-connection-key`, `x-api-key` and `content-type`; v3 answers

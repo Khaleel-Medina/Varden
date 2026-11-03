@@ -1833,7 +1833,7 @@ const deviceConfig = () => state.settings.device;
 
 const HANDY_MODES = ['hamp', 'hdsp'];
 
-// Firmware 4 hardware only answers API v3 and needs an app key; firmware 3 only answers v2.
+// Firmware 4 hardware only answers API v3 and needs an Application ID; firmware 3 only answers v2.
 // 'auto' tries the newer one when a key is present and falls back, so nobody has to know
 // which firmware their device runs.
 const HANDY_APIS = ['auto', 'v3', 'v2'];

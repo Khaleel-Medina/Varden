@@ -408,7 +408,7 @@ class HandyLink {
     this.api = 'v2';
     this.firmware = '';
     this.hardware = '';
-    // Set when the cloud refuses the app key, so a failure can say which of the two things
+    // Set when the cloud refuses the Application ID, so a failure can say which of the two
     // went wrong instead of blaming the device for a bad key.
     this.authRejected = false;
     // Set by the controller: lets every stroke read the freshest intensity instead of the
@@ -479,7 +479,7 @@ class HandyLink {
       throw new Error('Add the Handy connection key — the Handy app shows it under its connection settings.');
     }
     const appKey = String(this.config.handyAppKey || '').trim();
-    // v3 needs an app key and firmware 4 needs v3; v2 needs no app key and firmware 3 needs
+    // v3 needs an Application ID and firmware 4 needs v3; v2 needs none and firmware 3 needs
     // v2. So the saved preference is a starting point and the fallback is the real detector.
     const attempts =
       this.preference === 'v3'
