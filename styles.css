@@ -3063,6 +3063,34 @@ body.dragging {
   margin-top: 0;
 }
 
+/* Sound and voice are per-device preferences rather than model settings, so they sit in
+   their own quiet block instead of among the routes. */
+.extras-block .check-field {
+  margin-bottom: 6px;
+}
+
+.extras-block #voiceStatus {
+  min-height: 1rem;
+}
+
+.msg-actions [data-act='speak'].is-speaking {
+  color: #6fbf8f;
+  border-color: rgba(111, 191, 143, 0.5);
+}
+
+.art-generator {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.art-generator .ghost-button {
+  align-self: flex-start;
+}
+
 /* A server the visitor runs is a different promise from the amber pool: no key, no
    stranger in the middle, just an address they typed. Green keeps that clear. */
 .local-block {

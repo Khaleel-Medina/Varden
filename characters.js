@@ -83,6 +83,9 @@ const els = {
   avatarPreview: document.getElementById('avatarPreview'),
   avatarInput: document.getElementById('avatarInput'),
   clearAvatar: document.getElementById('clearAvatar'),
+  generateArt: document.getElementById('generateArtBtn'),
+  artPrompt: document.getElementById('artPrompt'),
+  artStatus: document.getElementById('artStatus'),
   name: document.getElementById('fName'),
   creator: document.getElementById('fCreator'),
   tagline: document.getElementById('fTagline'),
@@ -418,6 +421,81 @@ function readLoreRows() {
     .filter((entry) => entry.content || entry.keys.length);
 }
 
+let artBusy = false;
+
+function setArtStatus(message) {
+  if (els.artStatus) els.artStatus.textContent = message || '';
+}
+
+// The free image tier answers 402 with a usable sentence and a wait time in the body, so
+// its own words are better than a status code; a 5xx is a queue spike and worth a retry.
+function explainImageError(status, body) {
+  let message = '';
+  try {
+    message = JSON.parse(body)?.error?.message || '';
+  } catch {
+    message = String(body || '');
+  }
+  if (status === 402 || /free limit/i.test(message)) {
+    const seconds = Number((message.match(/retry after (\d+)/i) || [])[1] || 0);
+    return `The free image service allows one image every 45 seconds${seconds ? ` — about ${seconds}s to go` : ''}. Try again in a moment.`;
+  }
+  if (status >= 500) return 'The free image service is busy right now. Give it a few seconds and try again.';
+  if (message) return message.slice(0, 200);
+  return `The image service answered ${status}. Try again in a moment.`;
+}
+
+// Free and keyless on purpose: the image service renders a prompt and hands back a JPEG,
+// so there is no server of ours to pay for or keep alive. The prompt is built from the
+// card's own words rather than from a chat, so nothing about a scene is sent.
+async function generateAvatar() {
+  if (artBusy) return;
+  const name = els.name.value.trim();
+  const tagline = els.tagline.value.trim();
+  const extra = els.artPrompt?.value.trim() || '';
+  if (!name && !extra) {
+    setArtStatus('Give the character a name, or type what you want to see.');
+    els.name.focus();
+    return;
+  }
+  const prompt = [`portrait of ${name || 'a character'}`, tagline, extra, 'character art, painterly, soft light']
+    .filter(Boolean)
+    .join(', ')
+    .slice(0, 320);
+  const seed = Math.floor(Math.random() * 100000);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=512&height=512&nologo=true&seed=${seed}`;
+
+  artBusy = true;
+  if (els.generateArt) els.generateArt.disabled = true;
+  setArtStatus('Asking the free image service — one image every 45 seconds, so this can take a while.');
+  try {
+    let response = await fetch(url, { cache: 'no-store' });
+    if (response.status >= 500) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      response = await fetch(url, { cache: 'no-store' });
+    }
+    if (!response.ok) {
+      const detail = await response.text().catch(() => '');
+      throw new Error(explainImageError(response.status, detail));
+    }
+    const blob = await response.blob();
+    if (!/^image\//.test(blob.type)) throw new Error('The image service did not return an image.');
+    state.avatar = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Could not read the generated image.'));
+      reader.readAsDataURL(blob);
+    });
+    renderAvatarPreview();
+    setArtStatus(`Art added (${Math.round(blob.size / 1024)} KB). It is embedded when you export or publish the card.`);
+  } catch (error) {
+    setArtStatus(error?.message || 'The image service could not be reached.');
+  } finally {
+    artBusy = false;
+    if (els.generateArt) els.generateArt.disabled = false;
+  }
+}
+
 function openEditor(character) {
   state.editingId = character?.id || null;
   state.avatar = character?.avatar || null;
@@ -689,6 +767,10 @@ function bindEvents() {
     state.avatar = null;
     els.avatarInput.value = '';
     renderAvatarPreview();
+  });
+
+  els.generateArt?.addEventListener('click', () => {
+    void generateAvatar();
   });
 
   els.name.addEventListener('input', () => {

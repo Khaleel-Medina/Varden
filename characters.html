@@ -128,6 +128,19 @@
             </label>
             <button class="ghost-button" type="button" id="clearAvatar">Use gradient art</button>
             <p class="field-note">Shown on the card and embedded when you export a PNG card.</p>
+            <div class="art-generator">
+              <label class="upload-label">
+                Describe the art <span class="field-hint">optional, added to the name and tagline</span>
+                <input id="artPrompt" type="text" autocomplete="off" maxlength="160" placeholder="red-haired tavern keeper, candlelight" />
+              </label>
+              <button class="ghost-button" id="generateArtBtn" type="button">Generate art</button>
+              <p class="field-note" id="artStatus" role="status"></p>
+              <p class="field-note">
+                Art comes from a free public image service with no key and nothing to maintain. It allows one image every
+                45 seconds, so a second press may have to wait. Only the words above are sent, never a chat, and it refuses
+                explicit prompts — keep card art to how the character looks.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -187,6 +187,8 @@ const DEFAULT_SETTINGS = {
   hostedModel: null,
   keylessModel: null,
   keylessConfirmed: false,
+  sound: true,
+  speakReplies: false,
   localBase: LOCAL_DEFAULT_BASE,
   localModel: null,
   device: {
@@ -272,6 +274,9 @@ const els = {
   genText: $('genText'),
   genBar: $('genBar'),
   composerHint: $('composerHint'),
+  soundToggle: $('soundToggle'),
+  speakToggle: $('speakToggle'),
+  voiceStatus: $('voiceStatus'),
   exportChat: $('exportChatBtn'),
   personaDialog: $('personaDialog'),
   personaForm: $('personaForm'),
@@ -383,6 +388,107 @@ function saveSettings() {
   } catch (error) {
     console.warn('Varden: could not save settings', error);
   }
+}
+
+/* ---------------- sound + speech ---------------- */
+
+// Both are local: the chime is two oscillators made on the spot, and speech goes through
+// the browser's own voices. No asset to download, no key, and no text leaves the page.
+let audioContext = null;
+
+function audioEngine() {
+  if (!audioContext) {
+    const Ctor = window.AudioContext || window.webkitAudioContext;
+    if (!Ctor) return null;
+    audioContext = new Ctor();
+  }
+  if (audioContext.state === 'suspended') void audioContext.resume();
+  return audioContext;
+}
+
+// A quiet two-note rise. The browser only starts audio after a gesture, and the click
+// that sent the message is that gesture.
+function playChime() {
+  if (state.settings.sound === false) return;
+  const context = audioEngine();
+  if (!context) return;
+  const now = context.currentTime;
+  for (const note of [
+    { at: 0, freq: 587.33, gain: 0.05 },
+    { at: 0.09, freq: 880, gain: 0.036 },
+  ]) {
+    const oscillator = context.createOscillator();
+    const envelope = context.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.value = note.freq;
+    const start = now + note.at;
+    envelope.gain.setValueAtTime(0.0001, start);
+    envelope.gain.exponentialRampToValueAtTime(note.gain, start + 0.012);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, start + 0.26);
+    oscillator.connect(envelope).connect(context.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.28);
+  }
+}
+
+const speechSynth = () => (typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis : null);
+
+function setVoiceStatus(message) {
+  if (els.voiceStatus) els.voiceStatus.textContent = message || '';
+}
+
+function stopSpeech() {
+  speechSynth()?.cancel();
+  els.thread?.querySelectorAll('[data-act="speak"].is-speaking').forEach((button) => {
+    button.classList.remove('is-speaking');
+    button.textContent = 'Read';
+  });
+}
+
+// Markdown and stage asterisks read badly out loud; the words are what matter.
+function speechText(text) {
+  return String(text || '')
+    .replace(/```[\s\S]*?```/g, ' code block ')
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`#>~|]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 4000);
+}
+
+function speak(text, button) {
+  const synth = speechSynth();
+  if (!synth) {
+    setVoiceStatus('This browser has no speech synthesis, so replies cannot be read aloud here.');
+    return;
+  }
+  stopSpeech();
+  const clean = speechText(text);
+  if (!clean) return;
+  const utterance = new SpeechSynthesisUtterance(clean);
+  const voices = synth.getVoices();
+  const preferred = voices.find((voice) => /^en[-_]/i.test(voice.lang)) || voices[0];
+  if (preferred) utterance.voice = preferred;
+  if (button) {
+    button.classList.add('is-speaking');
+    button.textContent = 'Stop';
+  }
+  const done = () => {
+    if (!button) return;
+    button.classList.remove('is-speaking');
+    button.textContent = 'Read';
+  };
+  utterance.onend = done;
+  utterance.onerror = done;
+  synth.speak(utterance);
+}
+
+// One place decides what happens when a reply finishes: the chime for everyone, the
+// reading only for those who asked for it, and neither for an empty or failed reply.
+function announceReply(message, text) {
+  if (message?.error || !String(text || '').trim()) return;
+  playChime();
+  if (state.settings.speakReplies) speak(text, null);
 }
 
 /* ---------------- hosted model plumbing ---------------- */
@@ -1236,6 +1342,7 @@ function messageActions(message, index) {
   }
 
   add('copy', 'Copy');
+  if (message.role === 'assistant') add('speak', 'Read', 'Read this reply aloud');
   add('edit', 'Edit');
   if (message.role === 'assistant') add('regen', 'Regenerate');
   add('delete', 'Delete', 'Delete this message');
@@ -1831,6 +1938,8 @@ function syncControls() {
   els.input.disabled = busy;
   els.exportChat.disabled = !state.chat?.messages.length;
   els.newChat.disabled = busy;
+  if (els.soundToggle) els.soundToggle.checked = state.settings.sound !== false;
+  if (els.speakToggle) els.speakToggle.checked = Boolean(state.settings.speakReplies);
 }
 
 function deriveTitle(text) {
@@ -1941,6 +2050,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
           : await createLocalStream(prompt);
 
     state.devices?.begin();
+    stopSpeech();
     els.genStatus.hidden = false;
     els.genStatus.classList.add('busy');
     els.genText.textContent = localActive()
@@ -2001,6 +2111,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
     renderThread();
     await persistChat();
     syncModelChip();
+    announceReply(target, text);
     void rememberScene(chat);
   }
 }
@@ -2075,6 +2186,12 @@ async function handleThreadAction(action, index) {
   if (!message) return;
 
   switch (action) {
+    case 'speak': {
+      const button = els.thread.querySelector(`[data-act="speak"][data-index="${index}"]`);
+      if (button?.classList.contains('is-speaking')) stopSpeech();
+      else speak(messageText(message), button);
+      break;
+    }
     case 'copy':
       await copyText(messageText(message));
       break;
@@ -2510,9 +2627,15 @@ function bindEvents() {
   // A reply that keeps driving a toy while the tab is hidden or closing is the failure
   // mode worth designing against.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) state.devices?.stopNow();
+    if (!document.hidden) return;
+    state.devices?.stopNow();
+    // A voice talking to an empty room is the same failure as a toy still running.
+    stopSpeech();
   });
-  window.addEventListener('pagehide', () => state.devices?.stopNow());
+  window.addEventListener('pagehide', () => {
+    state.devices?.stopNow();
+    stopSpeech();
+  });
 
   els.personaSelect.addEventListener('change', () => {
     state.settings.personaId = els.personaSelect.value;
@@ -2540,6 +2663,26 @@ function bindEvents() {
     state.chat.authorNote = els.authorNote.value;
     clearTimeout(els.authorNote.timer);
     els.authorNote.timer = setTimeout(() => persistChat(), 600);
+  });
+
+  els.soundToggle?.addEventListener('change', () => {
+    state.settings.sound = els.soundToggle.checked;
+    saveSettings();
+    // Playing it right away is the only way to know what it sounds like.
+    if (state.settings.sound) playChime();
+    setVoiceStatus(state.settings.sound ? 'Chime on.' : 'Chime off.');
+  });
+  els.speakToggle?.addEventListener('change', () => {
+    state.settings.speakReplies = els.speakToggle.checked;
+    saveSettings();
+    if (!state.settings.speakReplies) stopSpeech();
+    setVoiceStatus(
+      state.settings.speakReplies
+        ? speechSynth()
+          ? 'Replies will be read aloud in this browser.'
+          : 'This browser has no speech synthesis, so nothing will be read aloud.'
+        : 'Replies will stay silent.'
+    );
   });
 
   els.temperature.addEventListener('input', () => {

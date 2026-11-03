@@ -239,6 +239,27 @@ because its promise is different: it works with no key and no account, but it is
 
 Nothing here is billed to the owner and nothing needs maintaining: no key, no server, no account.
 
+## Sound, voice and generated art
+
+Three small features that each avoid a service you would have to run or pay for.
+
+- **Chime** — synthesised with Web Audio (two sine notes, no audio file) when a reply finishes, never when a
+  transcript is merely rendered. Toggle in the chat panel's **Sound & voice** block, stored as `sound` in
+  `varden-chat-settings`. Browsers only allow audio after a gesture, which sending the message provides; if a
+  visitor never interacts, nothing plays.
+- **Read aloud** — the browser's `speechSynthesis`, so no text leaves the machine and there is no account. Every
+  assistant message has a **Read** button that toggles to **Stop**; `speakReplies` adds automatic reading. Markdown
+  and stage asterisks are stripped first, speech stops when generation starts, and it is cancelled when the tab is
+  hidden or closed. Browsers without speech synthesis say so instead of failing silently.
+- **Generated card art** — `image.pollinations.ai`, the same keyless host family as the free text pool, so art costs
+  nothing and nothing has to be kept alive. It returns a 512×512 JPEG with `access-control-allow-origin: *`; the
+  editor converts that to a data URL so it can be cropped square and embedded into the card PNG like any upload.
+  The prompt is built from the character's name, tagline and the optional description field — never from a chat — and
+  the service refuses explicit prompts, so it is for likeness, not scenes. **The free tier is one image per 45 seconds
+  per IP**, answered as `402 FREE_LIMIT` with a `Retry after Ns` sentence; `explainImageError` shows that sentence
+  rather than a status code, and a 5xx queue spike gets one automatic retry. The panel note states the limit so a
+  second press is not a surprise.
+
 ## Own server (Ollama, LM Studio, llama.cpp, vLLM)
 
 The chat panel has a fourth model route: an OpenAI-compatible server the visitor runs. It is the only remote route
