@@ -325,6 +325,22 @@ select {
   padding: 0 14px;
 }
 
+/* The dropdown list is drawn on its own opaque surface, so a see-through field
+   colour turns into white-on-white labels there. Solid colours on both layers. */
+select {
+  background-color: #191c26;
+}
+
+select option,
+select optgroup {
+  color: var(--text);
+  background-color: #191c26;
+}
+
+select option:disabled {
+  color: var(--muted);
+}
+
 textarea {
   min-height: 92px;
   resize: vertical;
