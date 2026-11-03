@@ -2926,6 +2926,16 @@ body.dragging {
   background: rgba(224, 96, 122, 0.1);
 }
 
+/* Once the filter is on, a flagged card should still read as flagged rather than blend
+   into the row it sits in. The badge carries the word; this carries the colour. */
+.shared-card.is-nsfw {
+  border-color: rgba(255, 138, 138, 0.34);
+}
+
+.shared-card.is-nsfw .shared-card-art {
+  border-bottom-color: rgba(255, 138, 138, 0.2);
+}
+
 .nsfw-badge {
   position: absolute;
   top: 0.5rem;

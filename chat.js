@@ -808,8 +808,11 @@ async function* localStream(prompt) {
   } catch (error) {
     // Stop is not a failure, so it must not be turned into a diagnosis.
     if (state.stopRequested || /abort/i.test(String(error?.name || ''))) throw error;
-    const listening = await localAnswersAtAll();
-    throw new Error(listening ? `LocalOriginRefused ${localBase()}` : `LocalSilent ${localBase()}`);
+    // A saved key is the one case the probe cannot speak to: no-cors requests may not
+    // carry an Authorization header, so a wrong key and a refused origin look identical.
+    const listening = state.local.key ? null : await localAnswersAtAll();
+    const verdict = listening === null ? 'LocalAmbiguous' : listening ? 'LocalOriginRefused' : 'LocalSilent';
+    throw new Error(`${verdict} ${localBase()}`);
   }
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
@@ -1012,9 +1015,6 @@ function applyAvatar(element, character) {
     image.src = character.avatar;
     image.alt = character.name;
     element.append(image);
-    element.classList.add('has-image');
-  } else {
-    element.classList.remove('has-image');
   }
 }
 
@@ -1792,6 +1792,9 @@ function describeError(error) {
   }
   if (/LocalSilent/.test(message)) {
     return 'Nothing answered at that address. Start your server, check the port in its output, and accept the browser\u2019s local-network prompt if it appeared. From an https page only loopback addresses (127.0.0.1, localhost) may be used over plain http.';
+  }
+  if (/LocalAmbiguous/.test(message)) {
+    return 'Your server did not accept the request. Because a server key is set, this page cannot test the address without it, so check all three: the key is right, the origin is allowed (Ollama answers 403 unless OLLAMA_ORIGINS lists this page), and the server is listening on that port.';
   }
   if (/Failed to fetch|network|net::/i.test(message) && hostedActive()) {
     return 'The request to the hosted provider did not go through. Check your connection and that the key is still valid, then try again.';

@@ -358,10 +358,8 @@ function renderAvatarPreview() {
     image.src = state.avatar;
     image.alt = 'Card art preview';
     els.avatarPreview.append(image);
-    els.avatarPreview.classList.add('has-image');
   } else {
     setAccent(els.avatarPreview, accentForName(els.name.value));
-    els.avatarPreview.classList.remove('has-image');
   }
 }
 
@@ -1061,6 +1059,9 @@ function visibilityBadge(card) {
 function myCardRow(card) {
   const article = document.createElement('article');
   article.className = 'shared-card my-card';
+  // The community row has always flagged NSFW; the owner's own list did not, so a draft
+  // gave no sign of the tag it would publish with.
+  if (card.nsfw) article.classList.add('is-nsfw');
 
   const art = document.createElement('div');
   art.className = 'shared-card-art';
@@ -1082,6 +1083,12 @@ function myCardRow(card) {
     });
   }
   art.append(visibilityBadge(card));
+  if (card.nsfw) {
+    const nsfwBadge = document.createElement('span');
+    nsfwBadge.className = 'nsfw-badge';
+    nsfwBadge.textContent = 'NSFW';
+    art.append(nsfwBadge);
+  }
 
   const body = document.createElement('div');
   body.className = 'shared-card-body';
