@@ -126,7 +126,7 @@ published PNGs live on the server.
 
 ## Card-art uploads
 
-Studio art goes through `POST /api/blob-upload`, a Node function (`@vercel/node`, per `vercel.json`) that needs
+Studio art goes through `POST /api/blob-upload.js` (`/api/blob-upload` is rewritten to it), a Node function (`@vercel/node`, per `vercel.json`) that needs
 `BLOB_READ_WRITE_TOKEN` in the Vercel project. Without that token the endpoint answers 503 and the page keeps the
 picture inline with the row rather than losing it.
 

@@ -692,7 +692,7 @@ async function uploadArtwork(dataUrl, slug, userId) {
     const file = new File([blob], `character-${slug}.png`, { type: blob.type || 'image/png' });
     // Raw bytes with the account in a header: the endpoint is a Node function, so
     // there is no multipart parser to carry and no edge bundle to break.
-    const response = await fetch('/api/blob-upload', {
+    const response = await fetch('/api/blob-upload.js', {
       method: 'POST',
       headers: {
         'content-type': file.type || 'image/png',
