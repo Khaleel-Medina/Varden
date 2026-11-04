@@ -27,7 +27,7 @@ import {
   relevantMemories,
   saveMemory,
 } from './cards.js';
-import { createDevices } from './devices.js';
+import { createDevices, stripCueTags } from './devices.js';
 
 const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
 const SETTINGS_KEY = 'varden-chat-settings';
@@ -2071,6 +2071,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
   const activeModel = MODEL_CATALOG.find((item) => item.id === (state.engineModel || state.settings.modelId));
   const recentText = history.slice(-6).map((message) => message.content).join(' ');
   const prompt = buildPrompt({
+    deviceCues: Boolean(state.devices?.connected),
     character: state.character,
     persona,
     chat: { ...chat, messages: history },
@@ -2112,9 +2113,11 @@ async function generate({ mode = 'reply', index = null } = {}) {
       if (delta) {
         if (!firstTokenAt) firstTokenAt = performance.now();
         text += delta;
-        setMessageText(target, text);
+        // The cue exists for the device, so it never reaches the page or the saved message.
+        const shown = stripCueTags(text);
+        setMessageText(target, shown);
         state.devices?.feed(delta);
-        scheduleStream(targetIndex, text);
+        scheduleStream(targetIndex, shown);
       }
       if (chunk?.usage) usage = chunk.usage;
     }
@@ -2145,8 +2148,8 @@ async function generate({ mode = 'reply', index = null } = {}) {
     if (!text.trim() && !target.error) {
       target.error = state.stopRequested ? 'Stopped before the first token.' : 'The model returned an empty reply. Try again.';
     }
-    setMessageText(target, text);
-    void state.devices?.finish();
+    setMessageText(target, stripCueTags(text));
+    void state.devices?.finish(text);
     state.generating = false;
     state.stopRequested = false;
     els.genStatus.classList.remove('busy');
@@ -2154,7 +2157,7 @@ async function generate({ mode = 'reply', index = null } = {}) {
     renderThread();
     await persistChat();
     syncModelChip();
-    announceReply(target, text);
+    announceReply(target, stripCueTags(text));
     void rememberScene(chat);
   }
 }

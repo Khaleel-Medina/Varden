@@ -178,6 +178,60 @@ const BLEND_MS = 1500;
 // once, so the buffer is also read at a space once it gets long.
 const SCENE_FLUSH_CHARS = 240;
 
+/* ---------------- the model's own cue ---------------- */
+
+// A word list can only see words: it cannot tell that a scene has moved on without one of its
+// cues, and it can be fooled by a sentence that merely mentions one. So a connected device is
+// also told what the scene is by the model that wrote it, in a single machine-readable line.
+// The line is deliberately the smallest thing a small model can produce reliably — one word
+// from a closed set and an optional pace — and anything malformed is ignored rather than
+// guessed at, which leaves the word list following the same reply as a fallback.
+const CUE_ACTS = new Set([...Object.keys(SCENES), 'none', 'stop', 'idle']);
+const CUE_TAG = String.raw`[\[(<]{1,2}\s*cue\s*[:=]\s*([a-z]+)?(?:\s*[:|,]\s*(\d{1,3}))?\s*[\]>)]{1,2}`;
+const cueTags = () => new RegExp(CUE_TAG, 'gi');
+
+// Complete tags only: a half-written one has to survive in the buffer until its end arrives.
+export function removeCueTags(text) {
+  const raw = String(text || '');
+  return /cue/i.test(raw) ? raw.replace(cueTags(), '') : raw;
+}
+
+// What may be shown and stored. A tag still being written is held back too, so it never
+// flashes on the page before it is complete.
+export function stripCueTags(text) {
+  const raw = String(text || '');
+  if (!/cue/i.test(raw)) return raw;
+  return raw
+    .replace(cueTags(), '')
+    .replace(/[\s]*[\[(<]{1,2}\s*cue\s*[:=]?[^\]>)\n]*$/i, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\s+$/, '');
+}
+
+// The last usable cue in the reply wins, so a model that writes one per paragraph still ends
+// where the reply ended.
+export function parseCueTag(text) {
+  const raw = String(text || '');
+  if (!/cue/i.test(raw)) return null;
+  let best = null;
+  for (const match of raw.matchAll(cueTags())) {
+    const act = String(match[1] || '').toLowerCase();
+    if (!CUE_ACTS.has(act)) continue;
+    const pace = match[2] === undefined ? null : clamp(Number(match[2]) / 10, 0, 1);
+    best = { act: act === 'none' || act === 'stop' || act === 'idle' ? null : act, pace };
+  }
+  return best;
+}
+
+// Everything the word list may read: text up to a tag that is still being written. Without
+// this, "[cue:th" and "rust]" would arrive as two harmless words; with it, they are one cue.
+export function readableScene(buffer) {
+  const raw = String(buffer || '');
+  const open = raw.lastIndexOf('[');
+  if (open <= raw.lastIndexOf(']')) return raw;
+  return raw.slice(0, open);
+}
+
 export class Scene {
   constructor({ now = () => Date.now(), idleMs = 90000, fluid = true } = {}) {
     this.now = now;
@@ -188,6 +242,8 @@ export class Scene {
     this.fluid = fluid !== false;
     this.prev = null;
     this.switchedAt = 0;
+    // The pace a cue asked for, before the reply's own energy nudges it.
+    this.tune = null;
   }
 
   setFluid(on) {
@@ -214,15 +270,30 @@ export class Scene {
       else if (cue) best = { act: cue.act, at: base + cue.at };
     }
     if (!best) return this.act;
-    if (best.act !== this.act) {
+    return this.accept(best.act);
+  }
+
+  // Every way the act can change goes through here, so a cue from the model and a cue from the
+  // prose blend from the same place and keep the idle timer the same way.
+  accept(act) {
+    if (act !== this.act) {
       // Freeze wherever the motion currently is, not the act it was heading for, so a change
       // during a change still starts from what the device is doing.
       this.prev = this.act ? this.current() : null;
       this.switchedAt = this.now();
+      this.act = act;
     }
-    this.act = best.act;
     this.lastAt = this.now();
     return this.act;
+  }
+
+  // The model's reading of its own scene outranks the word list: it wrote the scene, and it
+  // can tell an act from a mention of one. A cue naming an act that does not exist is ignored.
+  applyCue(cue) {
+    if (!cue) return this.act;
+    if (cue.act !== null && !SCENES[cue.act]) return this.act;
+    this.tune = cue.pace === null || cue.pace === undefined ? null : clamp(Number(cue.pace) || 0, 0, 1);
+    return this.accept(cue.act);
   }
 
   // The numbers motion actually uses right now: a blend while fluid, the act's own values
@@ -260,7 +331,11 @@ export class Scene {
   pace(level) {
     const half = this.current().half;
     const value = clamp(Number(level) || 0, 0, 1);
-    return Math.max(300, Math.round(half[1] - (half[1] - half[0]) * value));
+    // A cue's pace is the floor the reply's energy moves around, so the model can set a
+    // deliberate slow burn that a fast paragraph does not override.
+    const tuned =
+      this.tune === null || this.tune === undefined ? value : clamp(value * 0.35 + this.tune * 0.65, 0, 1);
+    return Math.max(300, Math.round(half[1] - (half[1] - half[0]) * tuned));
   }
 
   depth() {
@@ -1087,6 +1162,7 @@ export function createDevices({ onStatus } = {}) {
       suppressed = false;
       sustained = false;
       sceneBuffer = '';
+      scene.tune = null;
       link.setHold?.(0);
       reaction?.reset();
       void link.start?.();
@@ -1099,33 +1175,45 @@ export function createDevices({ onStatus } = {}) {
     feed(delta) {
       if (!link || muted) return;
       sceneBuffer += delta;
+      reaction?.feed(delta);
+      // The cue line is machine text: read it first, then take it out, so the word list never
+      // argues with the model about the same sentence.
+      if (/cue/i.test(sceneBuffer)) {
+        const cue = parseCueTag(sceneBuffer);
+        if (cue) scene.applyCue(cue);
+        sceneBuffer = removeCueTags(sceneBuffer);
+      }
+      const readable = readableScene(sceneBuffer);
       const boundary = Math.max(
-        sceneBuffer.lastIndexOf('.'),
-        sceneBuffer.lastIndexOf('!'),
-        sceneBuffer.lastIndexOf('?'),
-        sceneBuffer.lastIndexOf('\n')
+        readable.lastIndexOf('.'),
+        readable.lastIndexOf('!'),
+        readable.lastIndexOf('?'),
+        readable.lastIndexOf('\n')
       );
-      if (boundary >= 0 || sceneBuffer.length > SCENE_FLUSH_CHARS) {
-        let cut = boundary >= 0 ? boundary + 1 : sceneBuffer.length;
+      if (boundary >= 0 || readable.length > SCENE_FLUSH_CHARS) {
+        let cut = boundary >= 0 ? boundary + 1 : readable.length;
         if (boundary < 0) {
           // Cutting mid-word would split a cue in half and lose both halves.
-          const space = sceneBuffer.lastIndexOf(' ');
-          cut = space > 0 ? space + 1 : sceneBuffer.length;
+          const space = readable.lastIndexOf(' ');
+          cut = space > 0 ? space + 1 : readable.length;
         }
-        scene.observe(sceneBuffer.slice(0, cut));
+        scene.observe(readable.slice(0, cut));
         sceneBuffer = sceneBuffer.slice(cut);
       }
-      reaction?.feed(delta);
     },
 
     // Ends the reply: always stop, never leave the last command holding.
     // The reply ended. If a scene is still going and the hold is on, keep the pace instead of
     // going still — that is the whole point of following a scene rather than a stream.
-    async finish() {
+    async finish(replyText) {
       clearInterval(timer);
       timer = 0;
       muted = false;
       if (!link) return;
+      // The cue is written last, so the finished reply is read as a whole even when its last
+      // delta arrived with no punctuation to flush on.
+      const finalCue = parseCueTag(replyText);
+      if (finalCue) scene.applyCue(finalCue);
       // A reply can end mid-sentence; the last fragment still counts before deciding whether
       // to hold or stop.
       if (sceneBuffer) {

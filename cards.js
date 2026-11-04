@@ -1054,7 +1054,7 @@ export function activatedLore(character, haystack) {
   );
 }
 
-export function buildPrompt({ character, persona, chat, budget = DEFAULT_BUDGET_CHARS, noThink = false, memories = [] }) {
+export function buildPrompt({ character, persona, chat, budget = DEFAULT_BUDGET_CHARS, noThink = false, memories = [], deviceCues = false }) {
   const characterName = character?.name || 'Character';
   const userName = persona?.name || 'You';
   const fill = (text) => fillPlaceholders(text, characterName, userName);
@@ -1085,6 +1085,23 @@ export function buildPrompt({ character, persona, chat, budget = DEFAULT_BUDGET_
       .join('\n')
       .slice(0, 1400);
     blocks.push(`## What you remember from earlier in this story\n${remembered}`);
+  }
+
+  // The hardware follows what the writer says the scene is, because a word list can only see
+  // words. Only added when a device is connected: everyone else gets the same prompt as before.
+  if (deviceCues) {
+    blocks.push(
+      [
+        '## Device cue',
+        'A toy may be following this scene. End the reply with one line of its own, and nothing after it:',
+        '[cue:act] or [cue:act:pace]',
+        '- act is thrust, oral, hands, grind, tease, or none.',
+        '- pace is 1 to 10; leave it off when unsure.',
+        '- Use none when nothing physical is happening: talking, deciding, resting, or a painful or distressing moment.',
+        '- Describe what is happening, never what is offered, asked about or imagined.',
+        'Never mention the cue in the prose, and never write more than one.',
+      ].join('\n')
+    );
   }
 
   // Qwen3 reasons out loud by default, which leaks into the scene as visible
