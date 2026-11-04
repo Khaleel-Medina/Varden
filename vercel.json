@@ -23,10 +23,6 @@
   ],
   "routes": [
     {
-      "src": "/api/blob-upload",
-      "dest": "/api/blob-upload.js"
-    },
-    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },
