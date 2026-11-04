@@ -681,6 +681,33 @@ if (imageInput) {
   });
 }
 
+// The picture goes to Vercel Blob first so the row only carries a URL. That endpoint
+// needs BLOB_READ_WRITE_TOKEN; when it is unavailable the data URL is kept inline,
+// because a saved profile with its art silently missing is the bug people notice.
+const MAX_INLINE_ART = 900 * 1024;
+
+async function uploadArtwork(dataUrl, slug, userId) {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = new File([blob], `character-${slug}.png`, { type: blob.type || 'image/png' });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', userId);
+    formData.append('slug', slug);
+    const response = await fetch('/api/blob-upload', { method: 'POST', body: formData });
+    if (response.ok) {
+      const result = await response.json();
+      if (result?.url) return result.url;
+    }
+    console.warn('Varden: blob upload unavailable, keeping the picture inline', response.status);
+  } catch (error) {
+    console.warn('Varden: blob upload failed, keeping the picture inline', error);
+  }
+  if (String(dataUrl).length <= MAX_INLINE_ART) return dataUrl;
+  alert('That picture is too large for this site to store right now, so the profile was saved without it. Try a smaller image.');
+  return null;
+}
+
 form.addEventListener("submit", async (event) => {
   if (event.submitter?.value === "cancel") return;
   event.preventDefault();
@@ -699,32 +726,9 @@ form.addEventListener("submit", async (event) => {
     ["#8bd672", "#101818", "#6d5dfc"],
   ][characters.length % 3];
 
-  let artUrl = null;
-  
-  // Upload image to Vercel Blob
-  if (currentImageData) {
-    try {
-      const res = await fetch(currentImageData);
-      const blob = await res.blob();
-      const file = new File([blob], `character-${slug}.png`, { type: 'image/png' });
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('userId', currentUser.id);
-      formData.append('slug', slug);
-      
-      const uploadRes = await fetch('/api/blob-upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (uploadRes.ok) {
-        const result = await uploadRes.json();
-        artUrl = result.url;
-      }
-    } catch (e) {
-      console.warn('Image upload failed:', e);
-    }
-  }
+  // Art is a best-effort bonus: when the blob endpoint is missing or refuses, the
+  // picture is kept inline with the row rather than dropped on the floor.
+  const artUrl = currentImageData ? await uploadArtwork(currentImageData, slug, currentUser.id) : null;
 
   const character = {
     name,
@@ -763,7 +767,12 @@ form.addEventListener("submit", async (event) => {
     await saveToCache(currentUser.id, characters);
     renderGrid();
   } catch (e) {
-    alert('Failed to save character: ' + (e.message || 'Unknown error'));
+    const message = String(e?.message || 'Unknown error');
+    alert(
+      /duplicate key|already exists|unique/i.test(message)
+        ? 'You already have a character with that name. Give this one a different name, then save again.'
+        : `Failed to save character: ${message}`
+    );
   }
 });
 

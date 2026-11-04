@@ -33,6 +33,7 @@ import {
   signInWithProvider,
   signOut,
   signUp,
+  startLibrarySync,
   updateSharedCard,
   viewerIsAdmin,
 } from './shared.js';
@@ -951,7 +952,7 @@ const initialHash = window.location.hash;
 /* ---------------- accounts ---------------- */
 
 const ACCOUNT_NOTE =
-  'An account exists only so you can edit or delete the cards you publish and keep drafts private. Characters and chats stay in this browser.';
+  'An account keeps your cards and chats in sync across your devices, and lets you edit or delete the cards you publish and keep drafts private. Without one, everything stays in this browser.';
 
 function authUser() {
   return state.shared.user;
@@ -1434,7 +1435,11 @@ function initShared() {
       state.shared.returning = false;
       toast(`Signed in as ${user.email}.`);
     }
-    if (changed) loadMine();
+    if (changed) {
+      loadMine();
+      // Signing in is the moment this device learns about the account's other copy.
+      startLibrarySync(() => refresh());
+    }
   });
 
   renderAccount();
@@ -1454,6 +1459,8 @@ async function init() {
   await migrateLegacyChats();
   await refresh();
   initShared();
+  // Pull the account's copy in the background; the page is already usable.
+  startLibrarySync(() => refresh());
 }
 
 init().catch((error) => {

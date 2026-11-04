@@ -13,7 +13,8 @@
 // machine with no network, and a top-level CDN import would take the whole page
 // down instead of just disabling sharing.
 
-import { buildCardPng, parseCardFile } from './cards.js';
+import { applyLibrary, buildCardPng, librarySnapshot, onLibraryChange, parseCardFile } from './cards.js';
+import { mergeLibraries } from './library-sync.js';
 
 // Same public project as app.js. The anon key is safe to ship; row policies do the
 // actual gating (public read, owner-only write).
@@ -63,6 +64,9 @@ function bucketFor(visibility) {
 // schema is the most likely failure, so it gets its own instruction.
 function explain(error) {
   const message = String(error?.message || error || 'Unknown error');
+  if (/user_library/i.test(message)) {
+    return 'Cross-device sync is not set up yet — run supabase-library-sync.sql in the Supabase SQL editor.';
+  }
   if (/does not exist|schema cache|Could not find the table|column .* does not exist/i.test(message)) {
     return 'Shared cards are not set up yet — run supabase-shared-cards.sql and supabase-accounts.sql in the Supabase SQL editor.';
   }
@@ -462,4 +466,105 @@ export async function fetchSharedCard(row) {
   const file = new File([blob], filename, { type: 'image/png' });
   const { character } = await parseCardFile(file);
   return { character, blob, filename };
+}
+
+/* ---------------- cross-device library sync ---------------- */
+
+// The library itself stays local: every page reads IndexedDB first and works with
+// no account and no network. This adds a second copy per account, so cards and
+// chats written on one device turn up on the next one.
+//
+// One row holds one JSON document rather than a table per record: merging happens on
+// the devices by id and `updatedAt`, which keeps edits and deletions honest without
+// a server clock. Only the owner can read the row, so syncing a private card never
+// makes it public.
+
+const SYNC_TABLE = 'user_library';
+let syncRunning = null;
+let syncTimer = null;
+let syncNotify = null;
+let syncHandler = null;
+
+async function readRemoteLibrary(user) {
+  const supabase = await getClient();
+  const { data, error } = await supabase
+    .from(SYNC_TABLE)
+    .select('data, saved_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (error) throw new Error(explain(error));
+  return data?.data || null;
+}
+
+async function writeRemoteLibrary(user, library) {
+  const supabase = await getClient();
+  const savedAt = new Date().toISOString();
+  const { error } = await supabase
+    .from(SYNC_TABLE)
+    .upsert({ user_id: user.id, data: library, saved_at: savedAt }, { onConflict: 'user_id' });
+  if (error) throw new Error(explain(error));
+  return savedAt;
+}
+
+async function runSync() {
+  const user = await getSharedUser().catch(() => null);
+  if (!user) return { user: null, pulled: false, pushed: false, localChanged: false, error: null };
+  try {
+    const local = await librarySnapshot();
+    const remote = await readRemoteLibrary(user);
+    const { merged, localChanged, remoteChanged } = mergeLibraries(local, remote || undefined);
+    if (localChanged) await applyLibrary(merged);
+    let pushed = false;
+    if (remoteChanged || !remote) {
+      await writeRemoteLibrary(user, merged);
+      pushed = true;
+    }
+    return { user, pulled: Boolean(remote), pushed, localChanged, error: null };
+  } catch (error) {
+    return { user, pulled: false, pushed: false, localChanged: false, error: explain(error) };
+  }
+}
+
+// Concurrent callers share one run: two pages of the site open at once should not
+// race each other's writes into the same row.
+export function syncLibrary() {
+  if (syncRunning) return syncRunning;
+  syncRunning = runSync().finally(() => {
+    syncRunning = null;
+  });
+  return syncRunning;
+}
+
+function scheduleLibrarySync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncLibrary()
+      .then((result) => {
+        if (result?.localChanged) syncNotify?.();
+      })
+      .catch(() => {});
+  }, 1800);
+}
+
+// Called once per page after the local library is readable. Returns the first pull
+// so a page can wait for it (briefly) before painting.
+export function startLibrarySync(onRemoteChange) {
+  syncNotify = typeof onRemoteChange === 'function' ? onRemoteChange : null;
+  if (!syncHandler) {
+    syncHandler = onLibraryChange(() => scheduleLibrarySync());
+  }
+  return syncLibrary()
+    .then((result) => {
+      if (result?.localChanged) syncNotify?.();
+      return result;
+    })
+    .catch(() => null);
+}
+
+export function stopLibrarySync() {
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  syncNotify = null;
+  syncHandler?.();
+  syncHandler = null;
 }

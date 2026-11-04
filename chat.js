@@ -28,6 +28,7 @@ import {
   saveMemory,
 } from './cards.js';
 import { createDevices, stripCueTags } from './devices.js';
+import { getSharedUser, startLibrarySync } from './shared.js';
 
 const WEBLLM_CDN = 'https://esm.run/@mlc-ai/web-llm';
 const SETTINGS_KEY = 'varden-chat-settings';
@@ -2791,6 +2792,19 @@ function bindEvents() {
 
 /* ---------------- boot ---------------- */
 
+async function renderSyncNote() {
+  const note = document.getElementById('syncNote');
+  if (!note) return;
+  try {
+    const user = await getSharedUser();
+    note.textContent = user
+      ? `Synced as ${user.email} — cards and chats follow you to other devices.`
+      : 'Cards and chats stay in this browser. Sign in on the Library page to sync them.';
+  } catch {
+    note.textContent = 'Cards and chats stay in this browser.';
+  }
+}
+
 async function init() {
   loadSettings();
   buildModelSelect();
@@ -2804,6 +2818,12 @@ async function init() {
 
   await ensureSeeded();
   await migrateLegacyChats();
+
+  // A signed-in visitor's other devices may hold newer cards and chats. Wait briefly
+  // for that copy, then carry on with whatever is on this device — never block boot
+  // on a network that is not there.
+  await Promise.race([startLibrarySync(), new Promise((resolve) => setTimeout(resolve, 2500))]);
+  void renderSyncNote();
 
   state.characters = await listCharacters();
   state.personas = await listPersonas();

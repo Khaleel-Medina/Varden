@@ -105,8 +105,9 @@ See `supabase-schema.sql` for the full database schema. Key tables:
 
 ## Accounts, drafts and editing uploads
 
-Publishing a card now belongs to an account, which is what makes editing and deleting possible later. Characters and
-chats never leave the browser; the account only owns the published PNGs.
+Publishing a card now belongs to an account, which is what makes editing and deleting possible later. Signing in also
+syncs your own cards and chats between devices; without an account, characters and chats stay in the browser and only the
+published PNGs live on the server.
 
 1. Run `supabase-shared-cards.sql`, then `supabase-accounts.sql`, in the Supabase SQL editor (Dashboard → SQL → New
    query). Both are safe to run more than once.
@@ -118,6 +119,17 @@ chats never leave the browser; the account only owns the published PNGs.
    bytes cannot be fetched by guessing a URL — the owner sees the art through a one-hour signed URL.
 5. Column-level expectations: `shared_cards.visibility` is `public` or `private`, and `shared_cards.bucket` records which
    bucket holds the file. Saving a card in the other state rebuilds the PNG and moves the file.
+6. Run `supabase-library-sync.sql` so a signed-in visitor's cards and chats follow them between devices. One row per
+   account (`public.user_library`) holds the same shapes the browser keeps in IndexedDB, readable only by its owner.
+   Deletions travel as tombstones for ninety days, so the other device cannot push a deleted card back. The browser stays
+   the copy the pages read from: no account, or no network, changes nothing about how the library works.
+
+## Card-art uploads
+
+Studio art goes through `POST /api/blob-upload`, an Edge function that needs `BLOB_READ_WRITE_TOKEN` in the Vercel
+project. Without that token the endpoint answers 503 and the page keeps the picture inline with the row rather than
+losing it. `curriculum` note: the function must use `export const config = { runtime: 'edge' }` plus a default export —
+the Next-style `export const runtime` + named `POST` is not mounted by Vercel's `/api` builder and the route 404s.
 
 ## Models on GPUs without f16 shaders
 

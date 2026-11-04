@@ -7,6 +7,8 @@
 export const DB_NAME = 'varden-tavern';
 export const DB_VERSION = 2;
 export const STORES = ['characters', 'personas', 'chats', 'meta', 'memories'];
+// Everything that belongs to a person rather than to the app: what sync carries.
+export const LIBRARY_STORES = ['characters', 'chats', 'personas', 'memories'];
 // Bump when new seed cards are added so existing libraries pick them up.
 export const SEED_VERSION = 3;
 
@@ -113,13 +115,74 @@ export async function read(store, id) {
   return withStore(store, 'readonly', (objectStore) => wrap(objectStore.get(id)));
 }
 
+// A page that keeps a second copy of the library (an account) registers here, so the
+// storage layer never has to import the sharing client and make a cycle.
+let libraryChangeHook = null;
+let applyingLibrary = false;
+
+export function onLibraryChange(handler) {
+  libraryChangeHook = typeof handler === 'function' ? handler : null;
+  return () => {
+    if (libraryChangeHook === handler) libraryChangeHook = null;
+  };
+}
+
+function notifyLibraryChange(store, id) {
+  if (applyingLibrary || !libraryChangeHook || !LIBRARY_STORES.includes(store)) return;
+  try {
+    libraryChangeHook({ store, id });
+  } catch (error) {
+    console.warn('Varden: library change handler failed', error);
+  }
+}
+
 export async function write(store, value) {
   await withStore(store, 'readwrite', (objectStore) => wrap(objectStore.put(value)));
+  notifyLibraryChange(store, value?.id);
   return value;
 }
 
 export async function remove(store, id) {
-  return withStore(store, 'readwrite', (objectStore) => wrap(objectStore.delete(id)));
+  const result = await withStore(store, 'readwrite', (objectStore) => wrap(objectStore.delete(id)));
+  if (LIBRARY_STORES.includes(store)) {
+    // Leave a tombstone, or the other device would push the deleted card straight back.
+    const meta = (await readMeta()) || {};
+    const graves = { ...(meta.graves || {}) };
+    graves[store] = { ...(graves[store] || {}), [id]: Date.now() };
+    await writeMeta({ ...meta, graves });
+    notifyLibraryChange(store, id);
+  }
+  return result;
+}
+
+/* ---------------- whole-library snapshots (cross-device sync) ---------------- */
+
+export async function librarySnapshot() {
+  const meta = (await readMeta()) || {};
+  const snapshot = { savedAt: Date.now(), graves: meta.graves || {} };
+  for (const store of LIBRARY_STORES) snapshot[store] = await listAll(store);
+  return snapshot;
+}
+
+// Writing a merged copy back must not look like a person editing, so the change
+// hook is muted for the duration.
+export async function applyLibrary(library) {
+  applyingLibrary = true;
+  let written = 0;
+  try {
+    for (const store of LIBRARY_STORES) {
+      for (const record of library?.[store] || []) {
+        if (!record?.id) continue;
+        await write(store, record);
+        written += 1;
+      }
+    }
+    const meta = (await readMeta()) || {};
+    await writeMeta({ ...meta, graves: library?.graves || meta.graves || {} });
+  } finally {
+    applyingLibrary = false;
+  }
+  return written;
 }
 
 export async function readMeta(id = 'app') {
