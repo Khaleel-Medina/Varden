@@ -126,10 +126,10 @@ published PNGs live on the server.
 
 ## Card-art uploads
 
-Studio art goes through `POST /api/blob-upload.js` — the extension is part of the path: legacy `builds`
-keeps it, so a request to `/api/blob-upload` is a 404, a Node function (`@vercel/node`, per `vercel.json`) that needs
-`BLOB_READ_WRITE_TOKEN` in the Vercel project. Without that token the endpoint answers 503 and the page keeps the
-picture inline with the row rather than losing it.
+Studio art goes through `POST /api/blob-upload.js`, a Node function (`@vercel/node`, per `vercel.json`) that needs
+`BLOB_READ_WRITE_TOKEN` in the Vercel project. The `.js` is part of the path: legacy `builds` keeps the suffix on the
+function output, so a request to `/api/blob-upload` is a 404. Without the token the endpoint answers 503 and the page
+keeps the picture inline with the row rather than losing it.
 
 The browser posts the raw image bytes with `x-varden-user` / `x-varden-slug` headers, so the function needs no
 multipart parser and `bodyParser` stays off. It must **not** be switched to the edge runtime: `@vercel/blob` pulls in
