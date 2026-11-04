@@ -126,10 +126,15 @@ published PNGs live on the server.
 
 ## Card-art uploads
 
-Studio art goes through `POST /api/blob-upload`, an Edge function that needs `BLOB_READ_WRITE_TOKEN` in the Vercel
-project. Without that token the endpoint answers 503 and the page keeps the picture inline with the row rather than
-losing it. `curriculum` note: the function must use `export const config = { runtime: 'edge' }` plus a default export —
-the Next-style `export const runtime` + named `POST` is not mounted by Vercel's `/api` builder and the route 404s.
+Studio art goes through `POST /api/blob-upload`, a Node function (`@vercel/node`, per `vercel.json`) that needs
+`BLOB_READ_WRITE_TOKEN` in the Vercel project. Without that token the endpoint answers 503 and the page keeps the
+picture inline with the row rather than losing it.
+
+The browser posts the raw image bytes with `x-varden-user` / `x-varden-slug` headers, so the function needs no
+multipart parser and `bodyParser` stays off. It must **not** be switched to the edge runtime: `@vercel/blob` pulls in
+`node:stream` and undici, and the edge bundler rejects those modules, which fails the whole deployment. By the same
+token, a Next-style `export const runtime` + named `POST` is not mounted by Vercel's `/api` builder and the route
+just 404s.
 
 ## Models on GPUs without f16 shaders
 
