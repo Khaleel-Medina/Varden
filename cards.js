@@ -171,8 +171,20 @@ export async function applyLibrary(library) {
   let written = 0;
   try {
     for (const store of LIBRARY_STORES) {
+      const incoming = new Map();
       for (const record of library?.[store] || []) {
         if (!record?.id) continue;
+        incoming.set(record.id, record);
+      }
+      // A record the merged copy no longer has was deleted on another device. Drop it
+      // here too, or the card stays on this screen forever: the merge already carries
+      // the tombstone, so no second grave is written for it.
+      for (const record of await listAll(store)) {
+        if (record?.id && !incoming.has(record.id)) {
+          await withStore(store, 'readwrite', (objectStore) => wrap(objectStore.delete(record.id)));
+        }
+      }
+      for (const record of incoming.values()) {
         await write(store, record);
         written += 1;
       }
