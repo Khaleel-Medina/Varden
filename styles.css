@@ -3476,3 +3476,28 @@ body.dragging {
 .creator-form label.share-choice > input {
   accent-color: #6d5dfc;
 }
+
+/* The catalog cards use .card-tags while the library uses .lib-card-tags, and only the
+   latter had a rule: without it the pills ran together as "academymysteryslow burn". */
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.card-tags span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+/* Real card art fills the frame; the decorative ring belongs to the gradient placeholder
+   only, or it would sit on top of the picture. */
+.card-art:has(img)::after,
+.detail-art:has(img)::after {
+  display: none;
+}

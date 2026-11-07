@@ -108,6 +108,7 @@ const SEED_CHARACTERS = [
     rating: "4.9",
     created: "2026-06-19",
     art: ["#6d5dfc", "#141827", "#3ad6c6"],
+    art_url: "./assets/characters/natsume-kafka.jpg",
   },
   {
     id: "seren-aldera",
@@ -124,6 +125,7 @@ const SEED_CHARACTERS = [
     rating: "4.8",
     created: "2026-06-18",
     art: ["#3ad6c6", "#121721", "#f3b35a"],
+    art_url: "./assets/characters/seren-aldera.jpg",
   },
   {
     id: "marcellus-vane",
@@ -140,6 +142,7 @@ const SEED_CHARACTERS = [
     rating: "4.7",
     created: "2026-06-12",
     art: ["#f3b35a", "#1d1720", "#a78bfa"],
+    art_url: "./assets/characters/marcellus-vane.jpg",
   },
   {
     id: "iora-sable",
@@ -156,6 +159,7 @@ const SEED_CHARACTERS = [
     rating: "4.6",
     created: "2026-06-10",
     art: ["#f27b9b", "#14131f", "#6d5dfc"],
+    art_url: "./assets/characters/iora-sable.jpg",
   },
   {
     id: "tavi-emberlock",
@@ -172,6 +176,7 @@ const SEED_CHARACTERS = [
     rating: "4.8",
     created: "2026-06-16",
     art: ["#8bd672", "#111a18", "#f3b35a"],
+    art_url: "./assets/characters/tavi-emberlock.jpg",
   },
   {
     id: "elias-rook",
@@ -188,6 +193,7 @@ const SEED_CHARACTERS = [
     rating: "4.9",
     created: "2026-06-20",
     art: ["#9aa0ac", "#10131d", "#3ad6c6"],
+    art_url: "./assets/characters/elias-rook.jpg",
   },
 ];
 
