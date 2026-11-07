@@ -565,6 +565,15 @@ async function renderGrid() {
     `;
     grid.appendChild(card);
   }
+
+  // Fill the detail panel with the first card rather than leaving an empty frame.
+  // Before anyone clicks, that frame read as artwork that had failed to load.
+  if (!selectedId && visible.length) {
+    const first = visible[0];
+    selectedId = first.id || first.slug;
+    grid.querySelector('.character-card')?.classList.add('selected');
+    showDetail(first);
+  }
 }
 
 function showDetail(character) {

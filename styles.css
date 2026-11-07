@@ -3383,3 +3383,9 @@ body.dragging {
 .comment-post {
   padding: 8px 14px;
 }
+
+/* A hidden element stays hidden even when a class sets a display value: the
+   account dialog was offering Sign out to visitors who were not signed in. */
+[hidden] {
+  display: none !important;
+}
