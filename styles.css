@@ -3419,3 +3419,14 @@ body.dragging {
 #uploadDialog label.nsfw-choice > input {
   accent-color: #e0607a;
 }
+/* The base control rule gives every input and select a 46px minimum height so text
+   fields line up in a row. A checkbox is not a text field: without this the option
+   grew into a tall pillar and read as an empty box rather than a tick box. */
+#shareDialog label.share-choice > input,
+#shareDialog label.nsfw-choice > input,
+#uploadDialog label.nsfw-choice > input {
+  min-height: 0;
+  height: 1.05rem;
+  width: 1.05rem;
+  align-self: flex-start;
+}
