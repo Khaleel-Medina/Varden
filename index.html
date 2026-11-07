@@ -3,21 +3,42 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Varden</title>
+    <title>Varden — free local AI character cards and roleplay chat</title>
+    <meta name="description" content="Build a library of AI character cards, import SillyTavern PNG or JSON cards, and roleplay with models that run on your own GPU. Free, no API key, and nothing about the scene is uploaded." />
+    <link rel="canonical" href="https://varden-two.vercel.app/" />
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#07080d" />
+    <link rel="preconnect" href="https://ljruzruhbqkbxkflrvzi.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://esm.sh" />
     <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://varden-two.vercel.app/" />
     <meta property="og:site_name" content="Varden" />
     <meta property="og:title" content="Varden — character vault and local tavern" />
     <meta property="og:description" content="Roleplay with character cards whose models run on your own GPU. No accounts, no message limits, nothing sent to a server." />
-    <meta property="og:image" content="./assets/og-card.png" />
+    <meta property="og:image" content="https://varden-two.vercel.app/assets/og-card.png" />
+    <meta property="og:image:alt" content="Varden: a white dragon coiled around a downward sword over a deep purple field." />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Varden — character vault and local tavern" />
     <meta name="twitter:description" content="Character cards and roleplay chat that run locally through WebGPU." />
-    <meta name="twitter:image" content="./assets/og-card.png" />
+    <meta name="twitter:image" content="https://varden-two.vercel.app/assets/og-card.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Varden",
+        "url": "https://varden-two.vercel.app/",
+        "applicationCategory": "EntertainmentApplication",
+        "operatingSystem": "Any browser with WebGPU",
+        "description": "A local-first AI character vault: import or write character cards, then roleplay with models that run on your own GPU.",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "screenshot": "https://varden-two.vercel.app/assets/og-card.png"
+      }
+    </script>
   </head>
   <body>
     <div class="shell">
@@ -39,25 +60,26 @@
           <a class="nav-item nav-link" href="./get-started.html">Get Started</a>
           <a class="nav-item nav-link" href="./chat.html">Chat</a>
           <a class="nav-item nav-link" href="./characters.html">Library</a>
+          <a class="nav-item nav-link" href="./characters.html#community">Community</a>
           <button class="nav-item active" type="button">Catalog</button>
           <button class="nav-item" type="button">My Characters</button>
           <button class="nav-item" type="button">Drafts</button>
           <button class="nav-item" type="button">Bookmarks</button>
         </nav>
 
-        <section class="meter-panel" aria-label="Launch checklist">
-          <div class="section-kicker">Studio Status</div>
+        <section class="meter-panel" aria-label="How Varden runs">
+          <div class="section-kicker">At a glance</div>
           <div class="meter-row">
-            <span>Profiles</span>
-            <strong>Live</strong>
+            <span>Replies</span>
+            <strong>On your GPU</strong>
           </div>
           <div class="meter-row">
-            <span>Moderation</span>
-            <strong>Basic</strong>
+            <span>Account</span>
+            <strong>Optional</strong>
           </div>
           <div class="meter-row">
-            <span>Chat</span>
-            <strong>Local · WebGPU</strong>
+            <span>Message cap</span>
+            <strong>None</strong>
           </div>
         </section>
 
@@ -74,17 +96,21 @@
       <main class="workspace">
         <header class="topbar">
           <div>
-          <p class="eyebrow">Catalog</p>
+            <p class="eyebrow">Catalog</p>
             <h1>Varden</h1>
+            <p class="lib-sub">Free, local-first character chat: cards stay in this browser and replies run on your own GPU.</p>
           </div>
           <div class="topbar-actions">
             <a class="ghost-link" href="./chat.html">Local chat</a>
             <a class="ghost-link" href="./characters.html">Library</a>
+            <a class="ghost-link" href="./characters.html#community">Community</a>
             <a class="ghost-link" href="./get-started.html">Get Started</a>
-            <button class="ghost-button" type="button" id="toggleReview">Review queue</button>
+            <button class="ghost-button" type="button" id="toggleReview">Why Varden</button>
             <button class="solid-button" type="button" id="openCreateTop">Create</button>
           </div>
         </header>
+
+        <p class="field-note" id="communityCount" hidden></p>
 
         <section class="filters" aria-label="Character filters">
           <label class="search-box">
@@ -156,34 +182,34 @@
         </section>
       </main>
 
-      <aside class="review-panel" id="reviewPanel" aria-label="Review queue">
+      <aside class="review-panel" id="reviewPanel" aria-label="Why Varden">
         <div class="panel-heading">
           <div>
-            <p class="eyebrow">Trust Queue</p>
-            <h2>Moderation</h2>
+            <p class="eyebrow">Why Varden</p>
+            <h2>Private by default</h2>
           </div>
           <span class="status-dot"></span>
         </div>
         <div class="queue-list">
           <div class="queue-item">
-            <span>New public profile</span>
-            <strong>3 pending</strong>
+            <span>Replies</span>
+            <strong>On your GPU</strong>
           </div>
           <div class="queue-item">
-            <span>Reports</span>
-            <strong>0 open</strong>
+            <span>Cards and chats</span>
+            <strong>On this device</strong>
           </div>
           <div class="queue-item">
-            <span>Private drafts</span>
-            <strong>8 saved</strong>
+            <span>Sign-in</span>
+            <strong>Only to sync</strong>
           </div>
         </div>
         <div class="schema-box">
-          <p class="eyebrow">Profile Health</p>
-          <code>Identity complete</code>
-          <code>Avatar ready</code>
-          <code>Prompt notes saved</code>
-          <code>Visibility set</code>
+          <p class="eyebrow">What leaves the page</p>
+          <code>Local models: nothing</code>
+          <code>Own server: only to it</code>
+          <code>A device: numbers, never words</code>
+          <code>Hosted or free pool: only when you choose it</code>
         </div>
       </aside>
     </div>

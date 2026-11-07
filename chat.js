@@ -190,6 +190,8 @@ const DEFAULT_SETTINGS = {
   keylessConfirmed: false,
   sound: true,
   speakReplies: false,
+  voiceURI: null,
+  speechRate: 1,
   localBase: LOCAL_DEFAULT_BASE,
   localModel: null,
   device: {
@@ -281,6 +283,10 @@ const els = {
   soundToggle: $('soundToggle'),
   speakToggle: $('speakToggle'),
   voiceStatus: $('voiceStatus'),
+  voiceSelect: $('voiceSelect'),
+  speechRate: $('speechRate'),
+  speechRateOut: $('speechRateOut'),
+  testVoice: $('testVoice'),
   exportChat: $('exportChatBtn'),
   personaDialog: $('personaDialog'),
   personaForm: $('personaForm'),
@@ -366,6 +372,10 @@ function loadSettings() {
   // A remembered route only survives if it was confirmed once. Without this, a new
   // session could start shipping scenes off the device that was never asked.
   if (state.settings.keylessConfirmed !== true) state.settings.keylessModel = null;
+  // The system voice list is different on every machine, so the choice is stored per
+  // browser and simply ignored when that name is not there any more.
+  if (typeof state.settings.voiceURI !== 'string' || !state.settings.voiceURI.trim()) state.settings.voiceURI = null;
+  state.settings.speechRate = clampSetting(state.settings.speechRate, 1, 0.5, 1.5);
 
   const savedDevice = state.settings.device;
   state.settings.device = {
@@ -477,9 +487,9 @@ function speak(text, button) {
   const clean = speechText(text);
   if (!clean) return;
   const utterance = new SpeechSynthesisUtterance(clean);
-  const voices = synth.getVoices();
-  const preferred = voices.find((voice) => /^en[-_]/i.test(voice.lang)) || voices[0];
-  if (preferred) utterance.voice = preferred;
+  const voice = chooseVoice();
+  if (voice) utterance.voice = voice;
+  utterance.rate = Number(state.settings.speechRate) || 1;
   if (button) {
     button.classList.add('is-speaking');
     button.textContent = 'Stop';
@@ -501,6 +511,53 @@ function announceReply(message, text) {
   if (message?.error || message?.stopped || !String(text || '').trim()) return;
   playChime();
   if (state.settings.speakReplies) speak(text, null);
+}
+
+/* ---------------- voice picker ---------------- */
+
+// Reading aloud stays inside the browser: these are the voices the operating system
+// already ships with, so there is no key, no quota and no text leaving the page.
+const voiceList = () => speechSynth()?.getVoices() || [];
+
+function chooseVoice() {
+  const voices = voiceList();
+  const stored = state.settings.voiceURI
+    ? voices.find((voice) => voice.voiceURI === state.settings.voiceURI)
+    : null;
+  return stored || voices.find((voice) => /^en[-_]/i.test(voice.lang)) || voices[0] || null;
+}
+
+// Voices arrive asynchronously in Chromium, so this is rebuilt on voiceschanged as well
+// as at boot: an empty list at first paint is normal, not a failure.
+function buildVoiceSelect() {
+  if (!els.voiceSelect) return;
+  const voices = voiceList();
+  if (!voices.length) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = speechSynth() ? 'No voices reported yet' : 'Speech is not available in this browser';
+    els.voiceSelect.replaceChildren(option);
+    return;
+  }
+  const best = document.createElement('option');
+  best.value = '';
+  best.textContent = 'Best available voice';
+  const options = [best];
+  for (const voice of [...voices].sort((a, b) => a.lang.localeCompare(b.lang) || a.name.localeCompare(b.name))) {
+    const option = document.createElement('option');
+    option.value = voice.voiceURI;
+    option.textContent = `${voice.name} — ${voice.lang}${voice.localService ? '' : ' · online'}`;
+    options.push(option);
+  }
+  els.voiceSelect.replaceChildren(...options);
+  els.voiceSelect.value = voices.some((voice) => voice.voiceURI === state.settings.voiceURI)
+    ? state.settings.voiceURI
+    : '';
+}
+
+function syncVoiceControls() {
+  if (els.speechRate) els.speechRate.value = String(state.settings.speechRate);
+  if (els.speechRateOut) els.speechRateOut.value = `${Number(state.settings.speechRate).toFixed(2)}\u00d7`;
 }
 
 /* ---------------- hosted model plumbing ---------------- */
@@ -2749,6 +2806,27 @@ function bindEvents() {
     );
   });
 
+  els.voiceSelect?.addEventListener('change', () => {
+    state.settings.voiceURI = els.voiceSelect.value || null;
+    saveSettings();
+    const chosen = els.voiceSelect.selectedOptions?.[0]?.textContent || '';
+    setVoiceStatus(state.settings.voiceURI ? `Reading with ${chosen}. Press Test voice to hear it.` : 'Reading with the best available voice.');
+  });
+  els.speechRate?.addEventListener('input', () => {
+    state.settings.speechRate = clampSetting(els.speechRate.value, 1, 0.5, 1.5);
+    syncVoiceControls();
+    saveSettings();
+  });
+  els.testVoice?.addEventListener('click', () => {
+    if (!speechSynth()) {
+      setVoiceStatus('This browser has no speech synthesis, so it cannot read anything aloud.');
+      return;
+    }
+    speak(`${state.character?.name || 'Varden'} reads a line like this, at the speed you chose.`, null);
+  });
+  // Chromium fills the voice list a moment after load.
+  speechSynth()?.addEventListener?.('voiceschanged', () => buildVoiceSelect());
+
   els.temperature.addEventListener('input', () => {
     state.settings.temperature = Number(els.temperature.value);
     els.tempOut.value = Number(els.temperature.value).toFixed(2);
@@ -2815,6 +2893,8 @@ async function init() {
   buildDeviceUi();
   bindEvents();
   syncSettingsUi();
+  buildVoiceSelect();
+  syncVoiceControls();
 
   await ensureSeeded();
   await migrateLegacyChats();

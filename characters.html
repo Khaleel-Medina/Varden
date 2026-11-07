@@ -4,10 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Build and keep a library of AI character cards. Import Tavern cards, write your own, and chat with them locally on your GPU." />
+    <meta name="robots" content="noindex, follow" />
     <title>Library | Varden</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#07080d" />
+    <link rel="preconnect" href="https://ljruzruhbqkbxkflrvzi.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://esm.sh" />
   </head>
   <body class="library-body">
     <header class="lib-nav">
@@ -91,7 +96,7 @@
         <div class="lib-shared-grid" id="myGrid"></div>
       </section>
 
-      <section class="lib-shared" aria-labelledby="sharedHeading">
+      <section class="lib-shared" id="community" aria-labelledby="sharedHeading">
         <div class="lib-shared-head">
           <div>
             <p class="eyebrow">Community</p>

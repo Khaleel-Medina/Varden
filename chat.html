@@ -4,10 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Roleplay with AI character cards. Models run locally on your GPU through WebGPU — no accounts, no message limits, nothing sent to a server." />
+    <meta name="robots" content="noindex, follow" />
     <title>Chat | Varden</title>
     <link rel="stylesheet" href="./styles.css" />
     <link rel="icon" href="./assets/varden-mark.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./assets/icon-180.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <meta name="theme-color" content="#07080d" />
+    <link rel="preconnect" href="https://ljruzruhbqkbxkflrvzi.supabase.co" crossorigin />
+    <link rel="dns-prefetch" href="https://esm.sh" />
   </head>
   <body class="chat-body">
     <div class="chat-shell">
@@ -214,6 +219,17 @@
             <input id="speakToggle" type="checkbox" />
             Read replies aloud automatically
           </label>
+          <label class="field">
+            Voice <span class="field-hint">from this system</span>
+            <select id="voiceSelect"></select>
+          </label>
+          <label class="field slider-field">
+            <span>Speaking speed <output id="speechRateOut">1.00×</output></span>
+            <input id="speechRate" type="range" min="0.5" max="1.5" step="0.05" value="1" />
+          </label>
+          <div class="panel-actions">
+            <button class="ghost-button" id="testVoice" type="button">Test voice</button>
+          </div>
           <p class="field-note" id="voiceStatus" role="status"></p>
         </section>
 

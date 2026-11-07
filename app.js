@@ -478,9 +478,9 @@ function filteredCharacters() {
       return new Date(b.created) - new Date(a.created);
     }
     if (sortSelect.value === "likes") {
-      return b.likes - a.likes;
+      return (b.likes || 0) - (a.likes || 0);
     }
-    return b.likes + b.bookmarks - (a.likes + a.bookmarks);
+    return (b.likes || 0) + (b.bookmarks || 0) - ((a.likes || 0) + (a.bookmarks || 0));
   });
 
   return sorted.filter((character) => {
@@ -535,8 +535,11 @@ async function renderGrid() {
           ${(character.tags || []).slice(0, 3).map((tag) => `<span>${tag}</span>`).join("")}
         </div>
         <div class="card-stats">
-          <span>❤️ ${formatNumber(character.likes || 0)}</span>
-          <span>🔖 ${formatNumber(character.bookmarks || 0)}</span>
+          ${
+            character.user_id
+              ? `<span>❤️ ${formatNumber(character.likes || 0)}</span> <span>🔖 ${formatNumber(character.bookmarks || 0)}</span>`
+              : '<span>Demo card</span>'
+          }
         </div>
         <a class="card-chat" href="./chat.html?character=${encodeURIComponent(character.id || character.slug || "")}">Chat on this device</a>
       </div>
@@ -557,9 +560,11 @@ function showDetail(character) {
   detail.source.textContent = character.source || "Original";
   detail.name.textContent = character.name || "Untitled";
   detail.tagline.textContent = character.tagline || "";
-  detail.likes.textContent = formatNumber(character.likes || 0);
-  detail.bookmarks.textContent = formatNumber(character.bookmarks || 0);
-  detail.rating.textContent = character.rating || "—";
+  // Seed entries are demo cards with no real engagement behind them, so they show a
+  // label instead of invented counts.
+  detail.likes.textContent = character.user_id ? formatNumber(character.likes || 0) : "Demo";
+  detail.bookmarks.textContent = character.user_id ? formatNumber(character.bookmarks || 0) : "Demo";
+  detail.rating.textContent = character.user_id ? character.rating || "—" : "—";
   detail.greeting.textContent = character.greeting || "No greeting saved yet.";
   detail.personality.textContent = character.personality || "No personality notes yet.";
   detail.tags.replaceChildren(
@@ -782,4 +787,27 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+// The catalog lists your own cards (or the demo seeds), so the people who publish
+// cards for everyone live one page away. Saying how many there are, and linking
+// straight to them, is the difference between a feed nobody finds and a feed.
+async function showCommunityCount() {
+  const el = document.getElementById('communityCount');
+  if (!el) return;
+  try {
+    const { count, error } = await supabase
+      .from('shared_cards')
+      .select('id', { count: 'exact', head: true })
+      .eq('visibility', 'public')
+      .eq('nsfw', false);
+    if (error) throw error;
+    el.innerText = count
+      ? `${count} card${count === 1 ? '' : 's'} published by the community — browse or download them in the library.`
+      : 'Nobody has published a card yet. Share one of yours and it appears here for everyone.';
+    el.hidden = false;
+  } catch {
+    el.hidden = true;
+  }
+}
+
 loadCharacters();
+showCommunityCount();
