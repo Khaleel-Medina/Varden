@@ -116,6 +116,29 @@ export const OAUTH_PROVIDERS = [
   { id: 'github', label: 'GitHub' },
 ];
 
+// Which of those the project has actually switched on. The settings endpoint is
+// public, so this needs no secret. A provider that answers "not enabled" reads as
+// a broken sign-in, so it is better not to offer it at all; when the check cannot
+// run (offline, blocked) the full list comes back and a dead provider still
+// explains itself on click.
+let availableProvidersPromise = null;
+
+export function availableProviders() {
+  if (!availableProvidersPromise) {
+    availableProvidersPromise = fetch(`${SUPABASE_URL}/auth/v1/settings`, {
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((settings) => {
+        const external = settings?.external;
+        if (!external) return OAUTH_PROVIDERS;
+        return OAUTH_PROVIDERS.filter((provider) => external[provider.id] === true);
+      })
+      .catch(() => OAUTH_PROVIDERS);
+  }
+  return availableProvidersPromise;
+}
+
 // Where the provider returns the browser. This exact URL must be listed in
 // Supabase → Authentication → URL Configuration → Redirect URLs (both the
 // deployed origin and http://localhost:3000 while developing).

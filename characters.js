@@ -25,7 +25,7 @@ import {
   getSharedUser,
   listMyCards,
   listSharedCards,
-  OAUTH_PROVIDERS,
+  availableProviders,
   oauthErrorFromUrl,
   onAuthChange,
   shareCard,
@@ -1281,10 +1281,19 @@ async function removeUpload(id) {
 
 // One button per provider, built once. The list lives in shared.js so trimming a
 // provider is a one-line change rather than markup plus wiring.
-function renderProviders() {
+async function renderProviders() {
   if (!els.accountOauth || els.accountOauth.childElementCount) return;
+  const providers = await availableProviders();
+  const divider = document.getElementById('accountDivider');
+  if (!providers.length) {
+    els.accountOauth.hidden = true;
+    if (divider) divider.hidden = true;
+    return;
+  }
+  els.accountOauth.hidden = false;
+  if (divider) divider.hidden = false;
   els.accountOauth.append(
-    ...OAUTH_PROVIDERS.map((provider) => {
+    ...providers.map((provider) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'oauth-button';

@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { getCharacter, normalizeCharacter, saveCharacter } from './cards.js';
 // Only the provider list is used; shared.js creates its client lazily, so importing
 // it here does not open a second auth client on this page.
-import { OAUTH_PROVIDERS, probeProviderUrl } from './shared.js';
+import { availableProviders, probeProviderUrl } from './shared.js';
 
 // IndexedDB cache (inlined to avoid MIME type issues with local .js imports)
 const CACHE_DB = 'varden-cache';
@@ -256,10 +256,21 @@ function explainAuthError(error) {
   return message;
 }
 
-function buildAuthProviders() {
+async function buildAuthProviders() {
   if (!authOauth || authOauth.childElementCount) return;
+  const providers = await availableProviders();
+  const divider = document.getElementById('authDivider');
+  if (!providers.length) {
+    // Nothing to offer: drop the row and its "or use email" label rather than
+    // leaving an empty gap above the fields.
+    authOauth.hidden = true;
+    if (divider) divider.hidden = true;
+    return;
+  }
+  authOauth.hidden = false;
+  if (divider) divider.hidden = false;
   authOauth.append(
-    ...OAUTH_PROVIDERS.map((provider) => {
+    ...providers.map((provider) => {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'oauth-button';
