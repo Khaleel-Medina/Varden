@@ -25,6 +25,11 @@ import {
   getSharedUser,
   listMyCards,
   listSharedCards,
+  addCardComment,
+  deleteCardComment,
+  listCardComments,
+  loadEngagement,
+  toggleCardLike,
   availableProviders,
   oauthErrorFromUrl,
   onAuthChange,
@@ -58,6 +63,9 @@ const state = {
     returning: false,
     showNsfw: false,
     isAdmin: false,
+    likes: {},
+    commentCounts: {},
+    liked: new Set(),
   },
   account: { mode: 'signin', busy: false },
   share: { character: null, busy: false },
@@ -858,7 +866,62 @@ function sharedCardRow(card) {
   download.textContent = 'Download';
   download.title = 'Save the PNG card and add this character to your library';
 
-  body.append(title, by, tagline, download);
+  // Likes and comments sit on the card itself: the feed is where people react to
+  // someone else's work, and sending them to a detail page nobody opens would make
+  // the feature invisible.
+  const engage = document.createElement('div');
+  engage.className = 'engage-row';
+
+  const like = document.createElement('button');
+  like.type = 'button';
+  like.className = 'engage-button';
+  like.dataset.like = card.id;
+  like.title = 'Like this card';
+  like.setAttribute('aria-pressed', 'false');
+  const likeCount = document.createElement('span');
+  likeCount.className = 'engage-count';
+  likeCount.textContent = '0';
+  like.append(document.createTextNode('\u2665 '), likeCount);
+
+  const comments = document.createElement('button');
+  comments.type = 'button';
+  comments.className = 'engage-button';
+  comments.dataset.commentToggle = card.id;
+  comments.title = 'Read or add a comment';
+  const commentCount = document.createElement('span');
+  commentCount.className = 'engage-count';
+  commentCount.textContent = '0';
+  comments.append(document.createTextNode('\u{1F4AC} '), commentCount);
+
+  engage.append(like, comments);
+
+  const thread = document.createElement('div');
+  thread.className = 'card-comments';
+  thread.dataset.comments = card.id;
+  thread.hidden = true;
+
+  const list = document.createElement('div');
+  list.className = 'comment-list';
+  list.dataset.commentList = card.id;
+  list.textContent = 'Loading\u2026';
+
+  const commentForm = document.createElement('form');
+  commentForm.className = 'comment-form';
+  commentForm.dataset.commentForm = card.id;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'comment-input';
+  input.maxLength = 800;
+  input.placeholder = 'Add a comment\u2026';
+  input.setAttribute('aria-label', `Comment on ${card.name}`);
+  const post = document.createElement('button');
+  post.type = 'submit';
+  post.className = 'solid-button comment-post';
+  post.textContent = 'Post';
+  commentForm.append(input, post);
+
+  thread.append(list, commentForm);
+  body.append(engage, thread);
 
   // Admins may remove cards they did not publish. Their own cards are managed
   // through My cards, so this button never duplicates that.
@@ -898,6 +961,7 @@ function renderShared() {
   const hiddenNote = state.shared.showNsfw ? '' : ' NSFW cards are hidden — use the filter to show them.';
   els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library. Drafts marked private are not listed here.${hiddenNote}`;
   els.sharedGrid.append(...cards.map(sharedCardRow));
+  refreshEngagement();
 }
 
 async function loadShared() {
@@ -939,6 +1003,126 @@ async function pullSharedCard(id) {
       toast(`${character.name} added to your library.`);
     }
     downloadBlob(blob, filename);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+/* ---------------- likes and comments ---------------- */
+
+function paintEngagement(cardId) {
+  const liked = state.shared.liked.has(cardId);
+  const like = document.querySelector(`[data-like="${cardId}"]`);
+  if (like) {
+    like.classList.toggle('is-liked', liked);
+    like.setAttribute('aria-pressed', liked ? 'true' : 'false');
+    const count = like.querySelector('.engage-count');
+    if (count) count.textContent = formatTokens(state.shared.likes[cardId] || 0);
+  }
+  const toggle = document.querySelector(`[data-comment-toggle="${cardId}"]`);
+  const toggleCount = toggle?.querySelector('.engage-count');
+  if (toggleCount) toggleCount.textContent = formatTokens(state.shared.commentCounts[cardId] || 0);
+}
+
+async function refreshEngagement() {
+  const ids = state.shared.cards.map((card) => card.id).filter(Boolean);
+  if (!ids.length) return;
+  const { likes, comments, liked } = await loadEngagement(ids);
+  state.shared.likes = likes;
+  state.shared.commentCounts = comments;
+  state.shared.liked = new Set(liked);
+  for (const id of ids) paintEngagement(id);
+}
+
+async function toggleLikeFor(cardId) {
+  if (!state.shared.user) {
+    openAccountDialog('Sign in to like cards. Likes and comments are tied to an account so they follow you.');
+    return;
+  }
+  try {
+    const { liked } = await toggleCardLike(cardId);
+    if (liked) state.shared.liked.add(cardId);
+    else state.shared.liked.delete(cardId);
+    state.shared.likes[cardId] = Math.max(0, (state.shared.likes[cardId] || 0) + (liked ? 1 : -1));
+    paintEngagement(cardId);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+function toggleComments(cardId) {
+  const thread = document.querySelector(`[data-comments="${cardId}"]`);
+  if (!thread) return;
+  thread.hidden = !thread.hidden;
+  if (!thread.hidden) loadCommentsInto(cardId);
+}
+
+async function loadCommentsInto(cardId) {
+  const list = document.querySelector(`[data-comment-list="${cardId}"]`);
+  if (!list) return;
+  const { comments, error } = await listCardComments(cardId);
+  if (error) {
+    list.textContent = error;
+    return;
+  }
+  if (!comments.length) {
+    list.textContent = 'No comments yet \u2014 be the first.';
+    return;
+  }
+  const viewerId = state.shared.user?.id;
+  list.replaceChildren(
+    ...comments.map((row) => {
+      const item = document.createElement('div');
+      item.className = 'comment';
+      const head = document.createElement('div');
+      head.className = 'comment-head';
+      const who = document.createElement('strong');
+      who.textContent = row.author || 'someone';
+      const when = document.createElement('span');
+      when.textContent = new Date(row.created_at).toLocaleDateString();
+      head.append(who, when);
+      if (viewerId && row.user_id === viewerId) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'comment-delete';
+        remove.dataset.commentDelete = row.id;
+        remove.dataset.cardId = cardId;
+        remove.textContent = 'Delete';
+        head.append(remove);
+      }
+      const body = document.createElement('p');
+      body.textContent = row.body;
+      item.append(head, body);
+      return item;
+    })
+  );
+}
+
+async function submitComment(cardId, form) {
+  if (!state.shared.user) {
+    openAccountDialog('Sign in to comment on a card.');
+    return;
+  }
+  const input = form.querySelector('input');
+  const body = input?.value.trim();
+  if (!body) return;
+  try {
+    await addCardComment(cardId, body);
+    input.value = '';
+    await loadCommentsInto(cardId);
+    state.shared.commentCounts[cardId] = (state.shared.commentCounts[cardId] || 0) + 1;
+    paintEngagement(cardId);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+async function removeComment(commentId, cardId) {
+  try {
+    await deleteCardComment(commentId);
+    state.shared.commentCounts[cardId] = Math.max(0, (state.shared.commentCounts[cardId] || 0) - 1);
+    paintEngagement(cardId);
+    await loadCommentsInto(cardId);
   } catch (error) {
     toast(error?.message || String(error), 'bad');
   }
@@ -1416,7 +1600,7 @@ function initShared() {
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest?.(
-      '[data-share], [data-pull], [data-edit-upload], [data-delete-upload], [data-admin-delete]'
+      '[data-share], [data-pull], [data-edit-upload], [data-delete-upload], [data-admin-delete], [data-like], [data-comment-toggle], [data-comment-delete]'
     );
     if (!target) return;
     if (target.dataset.share) {
@@ -1434,6 +1618,16 @@ function initShared() {
     }
     if (target.dataset.deleteUpload) removeUpload(target.dataset.deleteUpload);
     if (target.dataset.adminDelete) adminRemoveCard(target.dataset.adminDelete);
+    if (target.dataset.like) toggleLikeFor(target.dataset.like);
+    if (target.dataset.commentToggle) toggleComments(target.dataset.commentToggle);
+    if (target.dataset.commentDelete) removeComment(target.dataset.commentDelete, target.dataset.cardId);
+  });
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target.closest?.('[data-comment-form]');
+    if (!form) return;
+    event.preventDefault();
+    submitComment(form.dataset.commentForm, form);
   });
 
   onAuthChange((user) => {

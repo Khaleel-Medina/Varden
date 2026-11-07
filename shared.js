@@ -591,3 +591,109 @@ export function stopLibrarySync() {
   syncHandler?.();
   syncHandler = null;
 }
+
+
+/* ---------------- community: likes and comments ---------------- */
+
+// Likes and comments hang off a published card. Reading is open to everyone because
+// the feed is public; writing needs a session and the policies make the row belong
+// to that session, so nothing here has to police ownership on its own.
+
+const ENGAGEMENT_LIMIT = 1000;
+
+// Counts for a page of cards in two queries rather than two per card.
+export async function loadEngagement(cardIds = []) {
+  const ids = [...new Set(cardIds.filter(Boolean))];
+  const empty = { likes: {}, comments: {}, liked: [] };
+  if (!ids.length) return empty;
+  try {
+    const supabase = await getClient();
+    const user = await getSharedUser();
+    const [likeRows, commentRows] = await Promise.all([
+      supabase.from('card_likes').select('card_id,user_id').in('card_id', ids).limit(ENGAGEMENT_LIMIT),
+      supabase.from('card_comments').select('card_id').in('card_id', ids).limit(ENGAGEMENT_LIMIT),
+    ]);
+    if (likeRows.error || commentRows.error) return empty;
+    const likes = {};
+    const liked = [];
+    for (const row of likeRows.data || []) {
+      likes[row.card_id] = (likes[row.card_id] || 0) + 1;
+      if (user && row.user_id === user.id) liked.push(row.card_id);
+    }
+    const comments = {};
+    for (const row of commentRows.data || []) {
+      comments[row.card_id] = (comments[row.card_id] || 0) + 1;
+    }
+    return { likes, comments, liked };
+  } catch {
+    return empty;
+  }
+}
+
+export async function listCardComments(cardId, limit = 100) {
+  try {
+    const supabase = await getClient();
+    const { data, error } = await supabase
+      .from('card_comments')
+      .select('id,card_id,user_id,author,body,created_at')
+      .eq('card_id', cardId)
+      .order('created_at', { ascending: true })
+      .limit(limit);
+    if (error) return { comments: [], error: explain(error) };
+    return { comments: data || [], error: null };
+  } catch (error) {
+    return { comments: [], error: explain(error) };
+  }
+}
+
+export async function addCardComment(cardId, body) {
+  const supabase = await getClient();
+  const user = await getSharedUser();
+  if (!user) throw new Error('Sign in to comment on a card.');
+  const text = String(body || '').trim().slice(0, 800);
+  if (!text) throw new Error('Write something first.');
+  const author =
+    user.user_metadata?.display_name ||
+    user.user_metadata?.full_name ||
+    user.email?.split('@')[0] ||
+    'someone';
+  const { data, error } = await supabase
+    .from('card_comments')
+    .insert({ card_id: cardId, user_id: user.id, author, body: text })
+    .select('id,card_id,user_id,author,body,created_at')
+    .single();
+  if (error) throw new Error(explain(error));
+  return data;
+}
+
+export async function deleteCardComment(id) {
+  const supabase = await getClient();
+  const user = await getSharedUser();
+  if (!user) throw new Error('Sign in to delete a comment.');
+  const { error } = await supabase.from('card_comments').delete().eq('id', id);
+  if (error) throw new Error(explain(error));
+  return true;
+}
+
+// One like per person per card, toggled. The primary key is the real guard; this
+// only decides whether to insert or delete.
+export async function toggleCardLike(cardId) {
+  const supabase = await getClient();
+  const user = await getSharedUser();
+  if (!user) throw new Error('Sign in to like a card.');
+  const { data: existing, error: readError } = await supabase
+    .from('card_likes')
+    .select('card_id')
+    .eq('card_id', cardId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+  if (readError) throw new Error(explain(readError));
+  if (existing) {
+    const { error } = await supabase.from('card_likes').delete().eq('card_id', cardId).eq('user_id', user.id);
+    if (error) throw new Error(explain(error));
+    return { liked: false };
+  }
+  const { error } = await supabase.from('card_likes').insert({ card_id: cardId, user_id: user.id });
+  if (error) throw new Error(explain(error));
+  return { liked: true };
+}

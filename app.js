@@ -527,7 +527,15 @@ async function renderGrid() {
     card.className = `character-card ${selectedId === character.id ? "selected" : ""}`;
     card.dataset.id = character.id || character.slug;
 
-    const art = character.art || character.art_a ? [character.art_a, character.art_b, character.art_c] : ["#6d5dfc", "#141827", "#3ad6c6"];
+    // A seed card carries its palette in `art`; a saved row carries art_a/b/c. The
+    // old condition was parsed as (art || art_a) ? [art_a, art_b, art_c] : palette,
+    // so seeds produced [undefined, undefined, undefined] and painted an empty
+    // circle where the gradient belongs.
+    const art = Array.isArray(character.art) && character.art.length === 3
+      ? character.art
+      : character.art_a
+        ? [character.art_a, character.art_b, character.art_c]
+        : ["#6d5dfc", "#141827", "#3ad6c6"];
 
     card.innerHTML = `
       <div class="card-art" style="--art-a:${art[0]};--art-b:${art[1]};--art-c:${art[2]}">
