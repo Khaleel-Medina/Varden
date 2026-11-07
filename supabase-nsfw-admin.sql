@@ -80,6 +80,10 @@ end;
 $$;
 
 revoke all on function public.promote_admin(text) from public;
+-- Supabase grants EXECUTE to anon and authenticated by name, and "from public" does
+-- not take those away: without this line any visitor holding the anon key could call
+-- the security-definer helper and make their own account an admin.
+revoke all on function public.promote_admin(text) from anon, authenticated;
 
 -- To undo: delete from public.admins where user_id = '<uuid>';
 
