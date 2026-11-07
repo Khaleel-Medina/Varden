@@ -3389,3 +3389,33 @@ body.dragging {
 [hidden] {
   display: none !important;
 }
+/* The card dialogs lay their fields out as a grid of labelled rows, and that rule
+   also caught the radio group and the NSFW checkbox: each control was stretched to
+   the full width of the dialog, so the option read as a big empty square instead of
+   a checkbox. A choice row keeps its control at its natural size and puts the text
+   beside it, which is also what makes it obvious that it is a choice. */
+#shareDialog label.share-choice,
+#shareDialog label.nsfw-choice,
+#uploadDialog label.nsfw-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  grid-template-columns: none;
+  width: auto;
+}
+
+#shareDialog label.share-choice > input,
+#shareDialog label.nsfw-choice > input,
+#uploadDialog label.nsfw-choice > input {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  margin: 0.15rem 0 0;
+  accent-color: #6d5dfc;
+}
+
+#shareDialog label.nsfw-choice > input,
+#uploadDialog label.nsfw-choice > input {
+  accent-color: #e0607a;
+}
