@@ -3448,3 +3448,31 @@ body.dragging {
 .lib-card.is-nsfw {
   border-color: rgba(255, 138, 138, 0.34);
 }
+
+/* The same stretch the publish dialog had also hits the new editor and import boxes,
+   because both sit in the same labelled-field grid. Scoping to .creator-form covers
+   every dialog at once instead of one id at a time. */
+.creator-form label.nsfw-choice,
+.creator-form label.share-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  grid-template-columns: none;
+  width: auto;
+}
+
+.creator-form label.nsfw-choice > input,
+.creator-form label.share-choice > input {
+  flex: 0 0 auto;
+  width: 1.05rem;
+  height: 1.05rem;
+  min-width: 1.05rem;
+  min-height: 0;
+  margin: 0.15rem 0 0;
+  align-self: flex-start;
+  accent-color: #e0607a;
+}
+
+.creator-form label.share-choice > input {
+  accent-color: #6d5dfc;
+}
