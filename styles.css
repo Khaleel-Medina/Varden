@@ -3501,3 +3501,28 @@ body.dragging {
 .detail-art:has(img)::after {
   display: none;
 }
+
+/* .card-meta had no rule either, so the name, the source and the visibility badge sat
+   on one line with no space between them ("Natsume Kafka Eidolon Academy public").
+   Name over source on the left, badge on the right, matching the library cards. */
+.card-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.card-meta > div {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.card-meta strong {
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.card-meta > div > span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
