@@ -82,3 +82,12 @@ $$;
 revoke all on function public.promote_admin(text) from public;
 
 -- To undo: delete from public.admins where user_id = '<uuid>';
+
+
+-- Admins can relabel any card, not only delete it. The label is what hides a card
+-- from everyone else's feed, so moderation has to work without the owner.
+drop policy if exists "admins update any shared card" on shared_cards;
+create policy "admins update any shared card" on shared_cards
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());

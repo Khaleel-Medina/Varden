@@ -34,6 +34,7 @@ import {
   oauthErrorFromUrl,
   onAuthChange,
   shareCard,
+  setCardNsfw,
   signIn,
   signInWithProvider,
   signOut,
@@ -865,6 +866,8 @@ function sharedCardRow(card) {
   download.textContent = 'Download';
   download.title = 'Save the PNG card and add this character to your library';
 
+  body.append(title, by, tagline, download);
+
   // Likes and comments sit on the card itself: the feed is where people react to
   // someone else's work, and sending them to a detail page nobody opens would make
   // the feature invisible.
@@ -932,6 +935,21 @@ function sharedCardRow(card) {
     remove.textContent = 'Remove (admin)';
     remove.title = 'Delete this card for everyone';
     body.append(remove);
+  }
+
+  // Admins can label any card, including one they did not publish. A card behind
+  // the NSFW filter is invisible to someone browsing from a work machine, so the
+  // label has to be fixable by whoever is moderating, not only by its owner.
+  if (state.shared.isAdmin && card.user_id) {
+    const flag = document.createElement('button');
+    flag.type = 'button';
+    flag.className = 'ghost-button admin-action';
+    flag.dataset.nsfwToggle = card.id;
+    flag.textContent = card.nsfw ? 'Clear NSFW' : 'Mark NSFW';
+    flag.title = card.nsfw
+      ? 'Show this card in the feed again'
+      : 'Hide this card behind the NSFW filter';
+    body.append(flag);
   }
 
   article.append(art, body);
@@ -1122,6 +1140,23 @@ async function removeComment(commentId, cardId) {
     state.shared.commentCounts[cardId] = Math.max(0, (state.shared.commentCounts[cardId] || 0) - 1);
     paintEngagement(cardId);
     await loadCommentsInto(cardId);
+  } catch (error) {
+    toast(error?.message || String(error), 'bad');
+  }
+}
+
+async function toggleCardNsfw(cardId) {
+  const card = state.shared.cards.find((item) => item.id === cardId);
+  if (!card) return;
+  const next = !card.nsfw;
+  try {
+    await setCardNsfw(cardId, next);
+    toast(
+      next
+        ? `${card.name} marked NSFW — hidden unless the viewer turns the filter on.`
+        : `${card.name} is back in the feed.`
+    );
+    await loadShared();
   } catch (error) {
     toast(error?.message || String(error), 'bad');
   }
@@ -1598,7 +1633,7 @@ function initShared() {
 
   document.addEventListener('click', (event) => {
     const target = event.target.closest?.(
-      '[data-share], [data-pull], [data-edit-upload], [data-delete-upload], [data-admin-delete], [data-like], [data-comment-toggle], [data-comment-delete]'
+      '[data-share], [data-pull], [data-edit-upload], [data-delete-upload], [data-admin-delete], [data-like], [data-comment-toggle], [data-comment-delete], [data-nsfw-toggle]'
     );
     if (!target) return;
     if (target.dataset.share) {
@@ -1616,6 +1651,7 @@ function initShared() {
     }
     if (target.dataset.deleteUpload) removeUpload(target.dataset.deleteUpload);
     if (target.dataset.adminDelete) adminRemoveCard(target.dataset.adminDelete);
+    if (target.dataset.nsfwToggle) toggleCardNsfw(target.dataset.nsfwToggle);
     if (target.dataset.like) toggleLikeFor(target.dataset.like);
     if (target.dataset.commentToggle) toggleComments(target.dataset.commentToggle);
     if (target.dataset.commentDelete) removeComment(target.dataset.commentDelete, target.dataset.cardId);

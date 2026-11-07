@@ -697,3 +697,21 @@ export async function toggleCardLike(cardId) {
   if (error) throw new Error(explain(error));
   return { liked: true };
 }
+
+
+// Label a published card. The row policy decides who may do it: the owner of the
+// card, or an admin. The label is what keeps a card out of a feed, so it has to be
+// correctable by someone other than the person who uploaded it.
+export async function setCardNsfw(cardId, nsfw) {
+  const supabase = await getClient();
+  const user = await getSharedUser();
+  if (!user) throw new Error('Sign in to mark a card NSFW.');
+  const { data, error } = await supabase
+    .from('shared_cards')
+    .update({ nsfw: Boolean(nsfw) })
+    .eq('id', cardId)
+    .select(CARD_FIELDS)
+    .single();
+  if (error) throw new Error(explain(error));
+  return data;
+}
