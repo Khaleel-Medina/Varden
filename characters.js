@@ -937,18 +937,23 @@ function sharedCardRow(card) {
     body.append(remove);
   }
 
-  // Admins can label any card, including one they did not publish. A card behind
-  // the NSFW filter is invisible to someone browsing from a work machine, so the
-  // label has to be fixable by whoever is moderating, not only by its owner.
-  if (state.shared.isAdmin && card.user_id) {
+  // Owners label what they published, admins label anything. A card behind the
+  // NSFW filter is invisible to someone browsing from a work machine, so the label
+  // has to be fixable by whoever is moderating it, not only by its uploader.
+  const ownedByViewer = Boolean(state.shared.user?.id && card.user_id === state.shared.user.id);
+  if (card.user_id && (ownedByViewer || state.shared.isAdmin)) {
     const flag = document.createElement('button');
     flag.type = 'button';
-    flag.className = 'ghost-button admin-action';
+    flag.className = ownedByViewer ? 'ghost-button' : 'ghost-button admin-action';
     flag.dataset.nsfwToggle = card.id;
     flag.textContent = card.nsfw ? 'Clear NSFW' : 'Mark NSFW';
-    flag.title = card.nsfw
-      ? 'Show this card in the feed again'
-      : 'Hide this card behind the NSFW filter';
+    flag.title = ownedByViewer
+      ? card.nsfw
+        ? 'Show your card in the feed again'
+        : 'Keep your card out of the feed unless the viewer turns the filter on'
+      : card.nsfw
+        ? 'Show this card in the feed again'
+        : 'Hide this card behind the NSFW filter';
     body.append(flag);
   }
 
@@ -975,7 +980,9 @@ function renderShared() {
     return;
   }
 
-  const hiddenNote = state.shared.showNsfw ? '' : ' NSFW cards are hidden — use the filter to show them.';
+  const hiddenNote = state.shared.showNsfw
+    ? ''
+    : ' NSFW cards are hidden — use the filter to show them (your own stay visible).';
   els.sharedNote.textContent = `${cards.length} card${cards.length === 1 ? '' : 's'} published. Download saves the PNG card and adds it to your library. Drafts marked private are not listed here.${hiddenNote}`;
   els.sharedGrid.append(...cards.map(sharedCardRow));
   refreshEngagement();
@@ -1146,7 +1153,11 @@ async function removeComment(commentId, cardId) {
 }
 
 async function toggleCardNsfw(cardId) {
-  const card = state.shared.cards.find((item) => item.id === cardId);
+  // The same button exists in the feed and in My cards, so the row may live in
+  // either list; both are refreshed afterwards to keep the two views in step.
+  const card =
+    state.shared.cards.find((item) => item.id === cardId) ||
+    state.shared.mine.find((item) => item.id === cardId);
   if (!card) return;
   const next = !card.nsfw;
   try {
@@ -1156,7 +1167,7 @@ async function toggleCardNsfw(cardId) {
         ? `${card.name} marked NSFW — hidden unless the viewer turns the filter on.`
         : `${card.name} is back in the feed.`
     );
-    await loadShared();
+    await Promise.all([loadShared(), loadMine()]);
   } catch (error) {
     toast(error?.message || String(error), 'bad');
   }
@@ -1334,7 +1345,17 @@ function myCardRow(card) {
   remove.className = 'ghost-button danger';
   remove.dataset.deleteUpload = card.id;
   remove.textContent = 'Delete';
-  actions.append(edit, remove);
+  // Flagging from here saves opening the edit dialog just to tick one box, and it is
+  // the same call the feed uses, so the two entry points cannot drift apart.
+  const flag = document.createElement('button');
+  flag.type = 'button';
+  flag.className = 'ghost-button';
+  flag.dataset.nsfwToggle = card.id;
+  flag.textContent = card.nsfw ? 'Clear NSFW' : 'Mark NSFW';
+  flag.title = card.nsfw
+    ? 'Show this card in the feed again'
+    : 'Keep this card out of the feed unless the viewer turns the filter on';
+  actions.append(edit, flag, remove);
 
   body.append(title, meta, tagline, actions);
   article.append(art, body);

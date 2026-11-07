@@ -288,7 +288,15 @@ export async function listSharedCards(limit = 60, { includeNsfw = false } = {}) 
       .eq('visibility', 'public')
       .order('created_at', { ascending: false })
       .limit(limit);
-    if (!includeNsfw) query = query.eq('nsfw', false);
+    if (!includeNsfw) {
+      // The filter hides NSFW cards from the viewer, never from their owner: an
+      // uploader who ticks the box has to be able to find the card again and clear
+      // it without first turning on the feed they were trying to keep clean.
+      const user = await getSharedUser();
+      query = user
+        ? query.or(`nsfw.eq.false,user_id.eq.${user.id}`)
+        : query.eq('nsfw', false);
+    }
     const { data, error } = await query;
     if (error) return { cards: [], error: explain(error) };
     return { cards: data || [], error: null };
