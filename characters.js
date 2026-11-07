@@ -132,7 +132,6 @@ const els = {
   accountToggle: document.getElementById('accountToggle'),
   accountSubmit: document.getElementById('accountSubmit'),
   accountSignOut: document.getElementById('accountSignOut'),
-  accountDone: document.getElementById('accountDone'),
   accountClose: document.getElementById('accountClose'),
   shareDialog: document.getElementById('shareDialog'),
   shareForm: document.getElementById('shareForm'),
@@ -1571,7 +1570,6 @@ function initShared() {
 
   els.accountBtn?.addEventListener('click', () => openAccountDialog());
   els.accountClose?.addEventListener('click', () => els.accountDialog.close());
-  els.accountDone?.addEventListener('click', () => els.accountDialog.close());
   els.accountSignOut?.addEventListener('click', handleSignOut);
   els.accountToggle?.addEventListener('click', () => {
     state.account.mode = state.account.mode === 'signup' ? 'signin' : 'signup';
@@ -1633,9 +1631,13 @@ function initShared() {
   onAuthChange((user) => {
     const changed = (state.shared.user?.id || null) !== (user?.id || null);
     state.shared.user = user;
+    state.shared.returning = false;
     renderAccount();
-    if (changed && user && state.shared.returning) {
-      state.shared.returning = false;
+    if (changed && user) {
+      // Signing in finishes the job the dialog was opened for, so the dialog closes
+      // itself. The signed-in panel, with Sign out as its only action, is what you
+      // see if you open the account again later.
+      if (els.accountDialog?.open) els.accountDialog.close();
       toast(`Signed in as ${user.email}.`);
     }
     if (changed) {
