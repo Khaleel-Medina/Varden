@@ -241,6 +241,9 @@ export function normalizeCharacter(raw = {}) {
           }))
       : [],
     favorite: Boolean(raw.favorite),
+    // Mature cards keep the label wherever a card exists: the library, the export and
+    // the published row all read the same flag.
+    nsfw: Boolean(raw.nsfw),
     createdAt: raw.createdAt || Date.now(),
     updatedAt: Date.now(),
   };
@@ -716,7 +719,7 @@ export function toCardV2(character) {
       tags: character.tags,
       creator: character.creator,
       character_version: '1.0',
-      extensions: { varden: { id: character.id, accent: character.accent, lorebook: character.lorebook } },
+      extensions: { varden: { id: character.id, accent: character.accent, lorebook: character.lorebook, nsfw: Boolean(character.nsfw) } },
     },
   };
 }
@@ -739,6 +742,7 @@ export function fromCardJson(raw) {
     postHistoryInstructions: data.post_history_instructions,
     tags: data.tags || [],
     accent: extensions.accent,
+    nsfw: extensions.nsfw,
     lorebook:
       extensions.lorebook ||
       (data.character_book?.entries || []).map((entry) => ({

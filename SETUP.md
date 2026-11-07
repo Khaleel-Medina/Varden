@@ -188,6 +188,11 @@ Uploads carry an `nsfw` flag, filtered **in the query** rather than after downlo
 requests art it is hiding. The Community feed has a **Show NSFW** toggle that remembers itself in localStorage, and both
 the publish and edit dialogs can set or clear the flag, so a card can be relabelled without re-uploading.
 
+The flag is on your own library cards too, because moderation has to start before a card is published: the editor has a
+**Mark as NSFW** box, the card's `⋯` menu toggles it in one click, and importing asks once for the whole batch. A flagged
+card shows an NSFW badge, drops out of the grid until **Show NSFW** is on (the toggle carries the hidden count), keeps
+the label through PNG/JSON export and re-import, and pre-ticks the publish dialog.
+
 Run `supabase-nsfw-admin.sql` after the accounts migration (idempotent). It adds:
 
 - `shared_cards.nsfw` plus an index for the filter

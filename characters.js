@@ -50,6 +50,8 @@ const state = {
   query: '',
   tag: 'all',
   sort: 'recent',
+  showNsfw: false,
+  pendingImport: null,
   editingId: null,
   avatar: null,
   lore: [],
@@ -117,6 +119,17 @@ const els = {
   showNsfw: document.getElementById('showNsfw'),
   shareNsfw: document.getElementById('shareNsfw'),
   fUploadNsfw: document.getElementById('fUploadNsfw'),
+  showLibraryNsfw: document.getElementById('showLibraryNsfw'),
+  showLibraryNsfwLabel: document.getElementById('showLibraryNsfwLabel'),
+  editorNsfw: document.getElementById('fEditorNsfw'),
+  importDialog: document.getElementById('importDialog'),
+  importForm: document.getElementById('importForm'),
+  importTitle: document.getElementById('importTitle'),
+  importNote: document.getElementById('importNote'),
+  importNsfw: document.getElementById('importNsfw'),
+  importClose: document.getElementById('importClose'),
+  importCancel: document.getElementById('importCancel'),
+  importConfirm: document.getElementById('importConfirm'),
   accountBtn: document.getElementById('accountBtn'),
   accountDialog: document.getElementById('accountDialog'),
   accountForm: document.getElementById('accountForm'),
@@ -185,6 +198,7 @@ function formatTokens(count) {
 function visibleCharacters() {
   const query = state.query.trim().toLowerCase();
   const filtered = state.characters.filter((character) => {
+    if (character.nsfw && !state.showNsfw) return false;
     if (state.tag !== 'all' && !character.tags.includes(state.tag)) return false;
     if (!query) return true;
     return [character.name, character.creator, character.tagline, character.description, character.tags.join(' ')]
@@ -214,6 +228,7 @@ function buildCard(character) {
   const chats = state.chats.filter((chat) => chat.characterId === character.id).length;
   const card = document.createElement('article');
   card.className = 'lib-card';
+  if (character.nsfw) card.classList.add('is-nsfw');
 
   const art = document.createElement('div');
   art.className = 'lib-card-art';
@@ -223,6 +238,13 @@ function buildCard(character) {
     image.src = character.avatar;
     image.alt = `${character.name} card art`;
     art.append(image);
+  }
+
+  if (character.nsfw) {
+    const nsfwBadge = document.createElement('span');
+    nsfwBadge.className = 'nsfw-badge';
+    nsfwBadge.textContent = 'NSFW';
+    art.append(nsfwBadge);
   }
 
   const favorite = document.createElement('button');
@@ -303,13 +325,20 @@ function renderGrid() {
   if (!visible.length) {
     const empty = document.createElement('div');
     empty.className = 'empty-state lib-empty';
+    const flagged = state.characters.filter((character) => character.nsfw).length;
     const title = document.createElement('p');
-    title.textContent = state.characters.length ? 'No characters match those filters.' : 'Your library is empty.';
+    title.textContent = !state.characters.length
+      ? 'Your library is empty.'
+      : flagged && !state.showNsfw && !state.query.trim() && state.tag === 'all'
+        ? `${flagged} mature card${flagged === 1 ? '' : 's'} hidden.`
+        : 'No characters match those filters.';
     const hint = document.createElement('p');
     hint.className = 'muted';
-    hint.textContent = state.characters.length
-      ? 'Try a different search or tag.'
-      : 'Create a character or import a Tavern card to begin.';
+    hint.textContent = !state.characters.length
+      ? 'Create a character or import a Tavern card to begin.'
+      : flagged && !state.showNsfw && !state.query.trim() && state.tag === 'all'
+        ? 'Turn on Show NSFW above the grid to see them.'
+        : 'Try a different search or tag.';
     empty.append(title, hint);
     els.grid.append(empty);
     return;
@@ -354,8 +383,19 @@ async function refresh() {
     state.tag = 'all';
   }
   renderTagFilter();
+  renderNsfwFilter();
   renderGrid();
   renderStats();
+}
+
+// The count lives on the toggle so a hidden card is discoverable without turning the
+// filter on: "Show NSFW (2)" is the only cue that anything is being filtered.
+function renderNsfwFilter() {
+  if (els.showLibraryNsfw) els.showLibraryNsfw.checked = state.showNsfw;
+  const flagged = state.characters.filter((character) => character.nsfw).length;
+  if (els.showLibraryNsfwLabel) {
+    els.showLibraryNsfwLabel.textContent = flagged ? `Show NSFW (${flagged})` : 'Show NSFW';
+  }
 }
 
 /* ---------------- editor ---------------- */
@@ -523,6 +563,7 @@ function openEditor(character) {
   els.example.value = character?.exampleDialogue || '';
   els.systemPrompt.value = character?.systemPrompt || '';
   els.postHistory.value = character?.postHistoryInstructions || '';
+  if (els.editorNsfw) els.editorNsfw.checked = Boolean(character?.nsfw);
 
   renderLore();
   renderAvatarPreview();
@@ -556,6 +597,7 @@ async function saveEditor() {
     avatar: state.avatar,
     accent: existing?.accent || accentForName(name),
     lorebook: lore,
+    nsfw: Boolean(els.editorNsfw?.checked),
   });
   await saveCharacter(character);
   els.dialog.close();
@@ -573,7 +615,23 @@ function cardKey(character) {
   return `${name}|${creator}`;
 }
 
-async function importFiles(files) {
+// A batch arrives all at once, so the flag is asked for once instead of per card. The
+// files wait in state while the dialog is open.
+function beginImport(files) {
+  const list = [...files].filter(Boolean);
+  if (!list.length) return;
+  state.pendingImport = list;
+  if (els.importTitle) {
+    els.importTitle.textContent = list.length === 1 ? 'Import this card' : `Import ${list.length} cards`;
+  }
+  if (els.importNote) {
+    els.importNote.textContent = `${list.length} file${list.length === 1 ? '' : 's'} ready. A card keeps the NSFW label it was exported with; this box flags the whole batch.`;
+  }
+  if (els.importNsfw) els.importNsfw.checked = false;
+  els.importDialog?.showModal();
+}
+
+async function importFiles(files, { nsfw = false } = {}) {
   const list = [...files].filter(Boolean);
   if (!list.length) return;
 
@@ -590,7 +648,12 @@ async function importFiles(files) {
         duplicates.push(existing.get(key));
         continue;
       }
-      const saved = await saveCharacter({ ...character, id: uid(), createdAt: Date.now() });
+      const saved = await saveCharacter({
+        ...character,
+        id: uid(),
+        createdAt: Date.now(),
+        nsfw: Boolean(nsfw) || Boolean(character.nsfw),
+      });
       existing.set(key, saved.name);
       imported += 1;
       toast(`${saved.name} imported.`);
@@ -644,6 +707,19 @@ async function duplicate(character) {
   toast('Character duplicated.');
 }
 
+// One click from the card menu, because flagging an imported card should not require
+// opening the whole editor.
+async function toggleCharacterNsfw(character) {
+  const next = !character.nsfw;
+  await saveCharacter({ ...character, nsfw: next });
+  await refresh();
+  toast(
+    next
+      ? `${character.name} marked NSFW — hidden until Show NSFW is on.`
+      : `${character.name} is no longer marked NSFW.`
+  );
+}
+
 function showMenu(character, anchor) {
   const existing = document.querySelector('.lib-menu');
   if (existing) existing.remove();
@@ -655,6 +731,7 @@ function showMenu(character, anchor) {
     ['Export PNG card', () => exportAs(character, 'png')],
     ['Export JSON card', () => exportAs(character, 'json')],
     ['Duplicate', () => duplicate(character)],
+    [character.nsfw ? 'Clear NSFW label' : 'Mark as NSFW', () => toggleCharacterNsfw(character)],
     ['Delete', () => removeCharacter(character)],
   ];
   for (const [label, action] of options) {
@@ -699,9 +776,19 @@ async function removeCharacter(character) {
 function bindEvents() {
   els.newButton.addEventListener('click', () => openEditor(null));
   els.importButton.addEventListener('click', () => els.importInput.click());
-  els.importInput.addEventListener('change', async () => {
-    await importFiles(els.importInput.files);
+  els.importInput.addEventListener('change', () => {
+    beginImport(els.importInput.files);
     els.importInput.value = '';
+  });
+  els.importClose?.addEventListener('click', () => els.importDialog?.close());
+  els.importCancel?.addEventListener('click', () => els.importDialog?.close());
+  els.importForm?.addEventListener('submit', async (event) => {
+    if (event.submitter && event.submitter.value === 'cancel') return;
+    event.preventDefault();
+    const files = state.pendingImport || [];
+    state.pendingImport = null;
+    els.importDialog?.close();
+    await importFiles(files, { nsfw: Boolean(els.importNsfw?.checked) });
   });
 
   els.search.addEventListener('input', () => {
@@ -711,6 +798,17 @@ function bindEvents() {
 
   els.sort.addEventListener('change', () => {
     state.sort = els.sort.value;
+    renderGrid();
+  });
+
+  els.showLibraryNsfw?.addEventListener('change', () => {
+    state.showNsfw = Boolean(els.showLibraryNsfw.checked);
+    try {
+      localStorage.setItem('varden.showLibraryNsfw', state.showNsfw ? '1' : '0');
+    } catch {
+      // A browser that refuses storage just forgets the choice.
+    }
+    renderNsfwFilter();
     renderGrid();
   });
 
@@ -811,7 +909,7 @@ function bindEvents() {
   }
   window.addEventListener('drop', async (event) => {
     document.body.classList.remove('dragging');
-    if (event.dataTransfer?.files?.length) await importFiles(event.dataTransfer.files);
+    if (event.dataTransfer?.files?.length) beginImport(event.dataTransfer.files);
   });
 
   window.addEventListener('keydown', (event) => {
@@ -1416,7 +1514,9 @@ function openShareDialog(character) {
   if (els.shareTitle) els.shareTitle.textContent = `Share ${character.name}`;
   const publicChoice = els.shareForm?.querySelector('input[name="shareVisibility"][value="public"]');
   if (publicChoice) publicChoice.checked = true;
-  if (els.shareNsfw) els.shareNsfw.checked = false;
+  // A card already flagged in the library is published flagged, so it cannot go out
+  // unfiltered just because the dialog reset itself.
+  if (els.shareNsfw) els.shareNsfw.checked = Boolean(character.nsfw);
   els.shareDialog?.showModal();
 }
 
@@ -1720,6 +1820,11 @@ function initShared() {
 }
 
 async function init() {
+  try {
+    state.showNsfw = localStorage.getItem('varden.showLibraryNsfw') === '1';
+  } catch {
+    state.showNsfw = false;
+  }
   bindEvents();
   await ensureSeeded();
   await migrateLegacyChats();

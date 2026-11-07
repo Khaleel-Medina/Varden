@@ -3430,3 +3430,21 @@ body.dragging {
   width: 1.05rem;
   align-self: flex-start;
 }
+
+/* ---------------- library NSFW filter ---------------- */
+.lib-view-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.lib-view-tools .field-note {
+  margin: 0;
+}
+
+/* The badge already says NSFW; the border keeps a flagged card from blending into the
+   row once the filter is on. */
+.lib-card.is-nsfw {
+  border-color: rgba(255, 138, 138, 0.34);
+}

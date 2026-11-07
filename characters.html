@@ -80,6 +80,14 @@
 
       <div class="tag-filter" id="tagFilter" aria-label="Filter by tag"></div>
 
+      <div class="lib-view-tools">
+        <label class="nsfw-toggle">
+          <input type="checkbox" id="showLibraryNsfw" />
+          <span id="showLibraryNsfwLabel">Show NSFW</span>
+        </label>
+        <span class="field-note">Your own mature cards stay out of the grid until this is on.</span>
+      </div>
+
       <section class="lib-grid" id="characterGrid" aria-live="polite"></section>
 
       <p class="lib-drop-hint" id="dropHint">Drop PNG or JSON character cards anywhere on this page to import them.</p>
@@ -217,6 +225,14 @@
           <div class="lore-list" id="loreList"></div>
         </section>
 
+        <label class="nsfw-choice">
+          <input type="checkbox" id="fEditorNsfw" />
+          <span>
+            Mark as <strong>NSFW</strong> — shows a badge on the card and hides it from the library while the filter is
+            off. Publishing pre-ticks the same box.
+          </span>
+        </label>
+
         <div class="dialog-actions">
           <button class="ghost-button" value="cancel" type="button" id="editorCancel">Cancel</button>
           <button class="solid-button" value="default" type="submit" id="editorSave">Save character</button>
@@ -307,6 +323,30 @@
         <div class="dialog-actions">
           <button class="ghost-button" value="cancel" type="button" id="shareCancel">Cancel</button>
           <button class="solid-button" value="default" type="button" id="shareConfirm">Publish card</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="creator-dialog lib-dialog mini-dialog" id="importDialog">
+      <form class="creator-form" id="importForm" method="dialog">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Import</p>
+            <h2 id="importTitle">Import cards</h2>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="importClose" aria-label="Close">x</button>
+        </div>
+
+        <p class="field-note" id="importNote"></p>
+
+        <label class="nsfw-choice">
+          <input type="checkbox" id="importNsfw" />
+          <span>Mark this batch as <strong>NSFW</strong> — useful when the files are mature work.</span>
+        </label>
+
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="button" id="importCancel">Cancel</button>
+          <button class="solid-button" value="default" type="submit" id="importConfirm">Import</button>
         </div>
       </form>
     </dialog>
