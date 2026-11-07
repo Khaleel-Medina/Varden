@@ -1678,6 +1678,10 @@ function initShared() {
     }
     if (changed) {
       loadMine();
+      // Admin status is a property of the account, so it has to be re-read when the
+      // account changes. Without this, a page loaded signed-out kept isAdmin false and
+      // showed no moderation controls until someone pressed Refresh.
+      loadShared();
       // Signing in is the moment this device learns about the account's other copy.
       startLibrarySync(() => refresh());
     }
